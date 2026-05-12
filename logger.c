@@ -25,3 +25,22 @@ void write_access_log(const char *user, const char *filename, int success) {
 
     fclose(fp);
 }
+/*패스워드 확인 로직에 이렇게 사용
+  
+
+
+#include "logger.h"
+
+// ... 패스워드 확인 로직 ...
+
+if (is_password_correct) {
+    write_access_log("thackmedy", "secret.txt", 1); // 성공 기록
+    // 파일 열기 로직
+} else {
+    write_access_log("thackmedy", "secret.txt", 0); // 실패 기록
+    printf("비밀번호가 틀렸습니다.\n");
+}
+
+
+
+*/
