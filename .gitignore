@@ -1,0 +1,20 @@
+# === 1. 빌드 결과물 (가장 중요) ===
+# 컴파일 과정에서 생기는 중간 파일들과 최종 실행 파일
+build/
+*.o
+*.out
+*.exe
+factoreal_exec  # 실제 생성될 실행 파일 이름을 적어주세요
+
+# === 2. 프로젝트 데이터 및 보안 ===
+# 질문하신 .pass_db를 포함한 민감한 파일 보호
+data/.pass_db
+*.log           # 로그 파일들이 생성된다면 제외
+
+# === 3. 운영체제 및 에디터 설정 파일 ===
+# 개인 설정 파일은 팀원과 공유할 필요가 없습니다.
+.DS_Store       # macOS
+Thumbs.db       # Windows
+.vscode/        # VS Code 설정
+.idea/          # IntelliJ/CLion 설정
+*.swp           # Vim 관련
