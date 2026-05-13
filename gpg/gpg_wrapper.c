@@ -3,8 +3,10 @@
 #include <locale.h>
 #include <gpgme.h>
 #include <string.h>
+#include <unistd.h>
 
 #define FN_MAX 1024
+#define PASSWORD_MAX 1024
 
 #define FILE_OPEN_ERROR -1
 
@@ -21,7 +23,28 @@ void gpg_init()
 
 }
 
-int lock_file(char fn[])
+// password callback
+gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphrase_info, int prev_was_bad, int fd)
+{
+	const char * password = (const char* ) hook;
+
+
+	if (prev_was_bad)
+	{
+		fprintf(stderr, "\n[ERROR] Password is not correct.\n");
+		return GPG_ERR_CANCELED;
+	}
+
+
+	write(fd, password, strlen(password));
+	write(fd, "\n", 1);
+
+	return 0;
+}
+
+
+// lock file fn
+int lock_file(char fn[], char pwd[])
 {
 	gpgme_ctx_t ctx;
 	gpgme_error_t err;
@@ -46,6 +69,12 @@ int lock_file(char fn[])
 	}
 
 	gpgme_set_protocol(ctx, GPGME_PROTOCOL_OpenPGP);
+
+	gpgme_set_pinentry_mode(ctx, GPGME_PINENTRY_MODE_LOOPBACK);
+
+	const char * password = pwd;
+
+	gpgme_set_passphrase_cb(ctx, password_cb, (void *) password);
 
 
 	// open file
@@ -118,7 +147,7 @@ cleanup:
 int main()
 {
 	
-	lock_file("secret.txt");
+	lock_file("secret.txt", "1234");
 
 	return 0;
 }
