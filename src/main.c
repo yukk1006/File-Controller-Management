@@ -1,0 +1,195 @@
+#include "auth.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/stat.h>
+
+#define INPUT_SIZE 1024
+#define PASSWORD_SIZE 256
+#define MAX_PATH_LEN 1024
+
+void handle_sigint(int signo) {
+    char answer[32];
+
+    (void)signo;
+
+    printf("\n정말로 종료하시겠습니까? (y/n): ");
+    fflush(stdout);
+
+    if (fgets(answer, sizeof(answer), stdin) == NULL) {
+        clearerr(stdin);
+        return;
+    }
+
+    if (answer[0] == 'y' || answer[0] == 'Y') {
+        printf("Factoreal을 종료합니다.\n");
+        exit(0);
+    }
+
+    printf("프로그램을 계속 실행합니다.\n");
+}
+
+static void print_usage(void) {
+    printf("\n");
+    printf("========== Factoreal ==========\n");
+    printf("사용 가능한 명령어:\n");
+    printf("  lock <파일/디렉토리 경로>    : 비밀번호 설정 후 chmod 000 잠금\n");
+    printf("  access <파일/디렉토리 경로>  : 비밀번호 인증 후 임시 접근\n");
+    printf("  remove <파일/디렉토리 경로>  : 비밀번호 인증 후 완전 잠금 해제\n");
+    printf("  status <파일/디렉토리 경로>  : 잠금 상태 확인\n");
+    printf("  help                         : 사용법 출력\n");
+    printf("  exit                         : 프로그램 종료\n");
+    printf("================================\n\n");
+}
+
+static int ask_exit_confirm(void) {
+    char answer[32];
+
+    printf("정말로 종료하시겠습니까? (y/n): ");
+
+    if (fgets(answer, sizeof(answer), stdin) == NULL) {
+        clearerr(stdin);
+        return 0;
+    }
+
+    if (answer[0] == 'y' || answer[0] == 'Y') {
+        return 1;
+    }
+
+    printf("프로그램을 계속 실행합니다.\n");
+    return 0;
+}
+
+static int resolve_path(const char *input_path, char *resolved_path) {
+    struct stat st;
+
+    if (input_path == NULL) {
+        fprintf(stderr, "경로가 입력되지 않았습니다.\n");
+        return -1;
+    }
+
+    if (stat(input_path, &st) != 0) {
+        fprintf(stderr, "경로를 찾을 수 없습니다: %s\n", input_path);
+        return -1;
+    }
+
+    if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "일반 파일 또는 디렉토리만 사용할 수 있습니다.\n");
+        return -1;
+    }
+
+    if (realpath(input_path, resolved_path) == NULL) {
+        fprintf(stderr, "경로를 해석할 수 없습니다: %s\n", input_path);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int read_password(char *buffer, size_t size) {
+    char *password = getpass("Password: ");
+
+    if (password == NULL) {
+        fprintf(stderr, "비밀번호 입력 실패\n");
+        return -1;
+    }
+
+    strncpy(buffer, password, size - 1);
+    buffer[size - 1] = '\0';
+
+    return 0;
+}
+
+static void execute_command(const char *command, const char *path_arg) {
+    char resolved_path[MAX_PATH_LEN];
+    char password[PASSWORD_SIZE];
+    int result;
+
+    if (strcmp(command, "help") == 0) {
+        print_usage();
+        return;
+    }
+
+    if (strcmp(command, "exit") == 0) {
+        if (ask_exit_confirm()) {
+            exit(0);
+        }
+        return;
+    }
+
+    if (path_arg == NULL) {
+        fprintf(stderr, "경로를 입력해주세요.\n");
+        return;
+    }
+
+    if (
+        strcmp(command, "lock") != 0 &&
+        strcmp(command, "access") != 0 &&
+        strcmp(command, "remove") != 0 &&
+        strcmp(command, "status") != 0
+    ) {
+        fprintf(stderr, "잘못된 명령어입니다!\n");
+        return;
+    }
+
+    if (resolve_path(path_arg, resolved_path) != 0) {
+        return;
+    }
+
+    if (strcmp(command, "status") == 0) {
+        if (auth_is_locked(resolved_path)) {
+            printf("잠금 상태입니다: %s\n", resolved_path);
+        } else {
+            printf("잠금 상태가 아닙니다: %s\n", resolved_path);
+        }
+        return;
+    }
+
+    if (read_password(password, sizeof(password)) != 0) {
+        return;
+    }
+
+    if (strcmp(command, "lock") == 0) {
+        result = auth_lock_file(resolved_path, password);
+    } else if (strcmp(command, "access") == 0) {
+        result = auth_access(resolved_path, password);
+    } else {
+        result = auth_remove_lock(resolved_path, password);
+    }
+
+    if (result != 0) {
+        fprintf(stderr, "명령 실행에 실패했습니다.\n");
+    }
+}
+
+int main(void) {
+    char input[INPUT_SIZE];
+
+    signal(SIGINT, handle_sigint);
+
+    print_usage();
+
+    while (1) {
+        printf("factoreal> ");
+        fflush(stdout);
+
+        if (fgets(input, sizeof(input), stdin) == NULL) {
+            clearerr(stdin);
+            continue;
+        }
+
+        char *command = strtok(input, " \n");
+        char *path_arg = strtok(NULL, " \n");
+
+        if (command == NULL) {
+            continue;
+        }
+
+        execute_command(command, path_arg);
+    }
+
+    return 0;
+}
