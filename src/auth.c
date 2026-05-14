@@ -1,4 +1,6 @@
-#include "auth.h"
+#include "../include/auth.h"
+#include "../include/logger.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <pwd.h>
 
 #define PASS_DB "data/.pass_db"
 #define TEMP_DB "data/.pass_db.tmp"
@@ -37,6 +40,25 @@ static unsigned long hash_password(const char *password) {
     }
 
     return hash;
+}
+
+/*
+ * 현재 리눅스 사용자 이름 가져오기
+ */
+static const char *get_current_username(void) {
+    const char *user = getlogin();
+
+    if (user != NULL) {
+        return user;
+    }
+
+    struct passwd *pw = getpwuid(getuid());
+
+    if (pw != NULL) {
+        return pw->pw_name;
+    }
+
+    return "unknown";
 }
 
 /*
@@ -190,7 +212,12 @@ static int remove_record(const char *path) {
 }
 
 /*
- * 비밀번호 검증 + 저장된 원래 권한 가져오기
+ * 비밀번호 검증 + 로그 기록 + 저장된 원래 권한 가져오기
+ *
+ * 로그 기록 기준:
+ * - 비밀번호 접근 시도 후
+ * - 성공하면 SUCCESS
+ * - 실패하면 FAIL
  */
 static int verify_password_and_get_mode(
     const char *path,
@@ -198,17 +225,21 @@ static int verify_password_and_get_mode(
     mode_t *saved_mode
 ) {
     unsigned long saved_hash;
+    const char *user = get_current_username();
 
     if (!find_record(path, &saved_hash, saved_mode)) {
+        write_access_log(user, path, 0);
         fprintf(stderr, "잠금 정보가 없습니다.\n");
         return -1;
     }
 
     if (hash_password(password) != saved_hash) {
+        write_access_log(user, path, 0);
         fprintf(stderr, "비밀번호가 틀렸습니다.\n");
         return -1;
     }
 
+    write_access_log(user, path, 1);
     return 0;
 }
 
@@ -289,7 +320,12 @@ static int auth_edit_file(const char *path, const char *password) {
     }
 
     int status;
-    waitpid(pid, &status, 0);
+
+    if (waitpid(pid, &status, 0) < 0) {
+        perror("waitpid");
+        chmod(path, 0000);
+        return -1;
+    }
 
     if (chmod(path, 0000) != 0) {
         perror("chmod relock");
@@ -319,9 +355,13 @@ static int auth_access_directory(const char *path, const char *password) {
     printf("디렉토리 접근이 허용되었습니다: %s\n", path);
     printf("작업이 끝나면 Enter를 누르세요...");
 
+    /*
+     * main.c에서 scanf()를 사용했다면 개행 문자가 입력 버퍼에 남을 수 있음.
+     * 첫 번째 while은 남아 있는 개행을 비우고,
+     * 두 번째 getchar()는 사용자가 실제로 Enter를 누를 때까지 대기.
+     */
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
-
     getchar();
 
     if (chmod(path, 0000) != 0) {
