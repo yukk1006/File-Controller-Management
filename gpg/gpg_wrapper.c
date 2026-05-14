@@ -7,6 +7,7 @@
 
 #define FN_MAX 1024
 #define PASSWORD_MAX 1024
+#define PASSWORD_ERROR -1
 
 #define FILE_OPEN_ERROR -1
 
@@ -31,7 +32,7 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 
 	if (prev_was_bad)
 	{
-		fprintf(stderr, "\n[ERROR] Password is not correct.\n");
+		fprintf(stderr, "\n[ERROR] Password is not same.\n");
 		return GPG_ERR_CANCELED;
 	}
 
