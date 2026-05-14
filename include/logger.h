@@ -6,3 +6,4 @@
 void write_access_log(const char *user, const char *filename, int success);
 
 #endif
+
