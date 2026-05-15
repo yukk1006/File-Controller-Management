@@ -12,16 +12,18 @@
 typedef struct
 {
 	char fn[FN_MAX];
-	char *buffer;
-	size_t size;
+	char pwd[PASSWORD_MAX];
+	int is_opened;
 } MemoryFile;
 
 int lock_file(char fn[], char pwd[]);
 
 int unlock_file(char fn[], char pwd[]);
 
-int open_file(char fn[], char pwd[], char **out_buffer, size_t *out_size);
+int open_file(char fn[], char pwd[]);
 
-int close_file(char *buffer, size_t size);
+int close_file(char fn[], char pwd[]);
+
+void show_current_gpg(MemoryFile current_file[]);
 
 #endif

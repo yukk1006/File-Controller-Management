@@ -9,6 +9,8 @@
 
 #include "gpg_wrapper.h"
 
+#define NOT_OPENED 0
+#define OPENED 1
 
 
 void gpg_init()
@@ -158,115 +160,14 @@ cleanup:
 	return 0;
 }
 
-int open_file(char fn[], char pwd[], char **out_buffer, size_t *out_size)
+int open_file(char fn[], char pwd[])
 {
-	gpgme_ctx_t ctx;
-	gpgme_error_t err;
-	gpgme_data_t in_data, out_data;
-
-	FILE* in_file;
-
-	char input_path[FN_MAX];
-	snprintf(input_path, sizeof(input_path), "%s.gpg", fn);
-
-	gpg_init();
-
-
-	err = gpgme_new(&ctx);
-
-	if(err)
-	{
-		fprintf(stderr, "GPGME context error: %s\n", gpgme_strerror(err));
-		return 1;
-	}
-
-	gpgme_set_protocol(ctx, GPGME_PROTOCOL_OpenPGP);
-
-	gpgme_set_pinentry_mode(ctx, GPGME_PINENTRY_MODE_LOOPBACK);
-
-	gpgme_set_passphrase_cb(ctx, password_cb, (void *) pwd);
-
-
-	// open file
-	in_file = fopen(input_path, "rb");
-	if (!in_file)
-	{
-		fprintf(stderr, "there is no file name %s.\n", input_path);
-		gpgme_release(ctx);
-		return FILE_OPEN_ERROR;
-	}
-
-
-	// connect file to gpg
-	err = gpgme_data_new_from_stream(&in_data, in_file);
-
-	if(err)
-	{
-		fprintf(stderr, "cannot create in_data : %s\n", gpgme_strerror(err));
-		goto cleanup;
-	}
-
-	err = gpgme_data_new(&out_data);
-
-	if(err)
-	{
-		fprintf(stderr, "cannot create out_data : %s\n", gpgme_strerror(err));
-		gpgme_data_release(in_data);
-		goto cleanup;
-	}
-
-
-	// lock file
-
-	err = gpgme_op_decrypt(ctx, in_data, out_data);
-
-	if (err)
-	{
-		fprintf(stderr, "\nfailed to open file %s : %s\n", input_path, gpgme_strerror(err));
-		*out_buffer = NULL;
-		*out_size = 0;
-	}
-	else
-	{
-		off_t size = gpgme_data_seek(out_data, 0, SEEK_END);
-
-		gpgme_data_seek(out_data, 0, SEEK_SET);
-
-		*out_buffer = (char *)malloc(size + 1);
-
-		gpgme_data_read(out_data, *out_buffer, size);
-		(*out_buffer)[size] = '\0';
-		*out_size = size;
-
-
-		printf("file %s opened\n", input_path);
-	}
-
-
-	gpgme_data_release(in_data);
-	gpgme_data_release(out_data);
-
-
-cleanup:
-	fclose(in_file);
-
-
-	gpgme_release(ctx);
-
-	return 0;
+	return unlock_file(fn, pwd);
 }
 
-int close_file(char *buffer, size_t size)
+int close_file(char fn[], char pwd[])
 {
-	if (buffer != NULL)
-	{
-		memset(buffer, 0, size);
-
-		free(buffer);
-		printf("file closed\n");
-	}
-
-	return 0;
+	return lock_file(fn, pwd);
 }
 
 int unlock_file(char fn[], char pwd[])
@@ -419,6 +320,21 @@ pwd:
 	return 0;
 }
 
+void show_current_gpg(MemoryFile current_file[])
+{
+	int cnt = 0;
+
+	printf("========== current opened file ==========\n");
+
+	for (int i=0; i<MAX_FILE_GPG; i++)
+	{
+		if( current_file[i].is_opened == OPENED)
+		{
+			printf("%2d : %s\n",++cnt,current_file[i].fn);
+		}
+	}
+}
+
 
 int main()
 {
@@ -427,11 +343,10 @@ int main()
 	char filename[FN_MAX];
 	char password[PASSWORD_MAX];
 
-	MemoryFile current_file = {"", NULL, 0};
+	MemoryFile current_file[MAX_FILE_GPG] = {0};
+	int gpg_count = 0;
 
-	printf("system\n");
-
-	// char cmd[FN_MAX*3];
+	printf("====================factoreal=======================\n");
 
 	while (1) {
         printf("\nenter command >> ");
@@ -440,8 +355,16 @@ int main()
 
         // 1. exit (종료)
         if (strcmp(command, "exit") == 0) {
-            if (current_file.buffer != NULL) {
-                close_file(current_file.buffer, current_file.size);
+            if (gpg_count != 0) {
+
+            	for (int i=0; i<MAX_FILE_GPG; i++)
+            	{
+            		if (current_file[i].is_opened == OPENED)
+            		{
+            			close_file(current_file[i].fn, current_file[i].pwd);
+            		}
+            	}
+                
             }
             printf("exit program.\n");
             break;
@@ -458,64 +381,92 @@ int main()
             password[strcspn(password, "\n")] = '\0';
 
             lock_file(filename, password);
-            memset(password, 0, PASSWORD_MAX); // 보안 파기
         }
 
         // 3. open (메모리로 로드)
         else if (strcmp(command, "open") == 0) {
-            // 구조체의 buffer가 NULL이 아니면 이미 로드된 상태
-            if (current_file.buffer != NULL) {
-                printf("이미 열려있는 파일(%s)이 있습니다. 먼저 close 하세요.\n", current_file.fn);
-                continue;
-            }
+        	if (gpg_count == MAX_FILE_GPG)
+        	{
+        		printf("No space to open file. Current : %2d\n",gpg_count);
+        		continue;
+        	}
+        	else
+        	{
+        		int i;
+        		for (i=0; i<MAX_FILE_GPG; i++)
+            	{
+            		if(current_file[i].is_opened == NOT_OPENED)
+            		{
+            			break;
+            		}
+            	}
 
-            printf("열 파일명(확장자 제외): ");
-            fgets(filename, FN_MAX, stdin);
-            filename[strcspn(filename, "\n")] = '\0';
+            	printf("open file (without .gpg): ");
+            	fgets(current_file[i].fn,FN_MAX,stdin);
+            	current_file[i].fn[strcspn(current_file[i].fn, "\n")] = '\0';
 
-            printf("비밀번호 입력: ");
-            fgets(password, PASSWORD_MAX, stdin);
-            password[strcspn(password, "\n")] = '\0';
 
-            // 구조체 내부 변수들의 주소값을 전달하여 데이터 채우기
-            if (open_file(filename, password, &current_file.buffer, &current_file.size) == GPG_SUCCESS) {
-                strncpy(current_file.fn, filename, FN_MAX); // 파일명 저장
-                printf("--- [%s] 내용 ---\n%s\n----------------\n", current_file.fn, current_file.buffer);
-            }
-            memset(password, 0, PASSWORD_MAX); // 보안 파기
+            	printf("password : ");
+	            fgets(current_file[i].pwd, PASSWORD_MAX, stdin);
+	            current_file[i].pwd[strcspn(current_file[i].pwd, "\n")] = '\0';
+
+	            unlock_file(current_file[i].fn, current_file[i].pwd);
+
+	            gpg_count++;
+	            current_file[i].is_opened = OPENED;
+        	}
+            
+
         }
 
         // 4. unlock (파일 복원)
         else if (strcmp(command, "unlock") == 0) {
-            printf("잠금 해제할 파일명(확장자 제외): ");
+            printf("filename (without .gpg): ");
             fgets(filename, FN_MAX, stdin);
             filename[strcspn(filename, "\n")] = '\0';
 
-            printf("비밀번호 입력: ");
+            printf("password: ");
             fgets(password, PASSWORD_MAX, stdin);
             password[strcspn(password, "\n")] = '\0';
 
             unlock_file(filename, password);
-            memset(password, 0, PASSWORD_MAX); // 보안 파기
         }
 
         // 5. close (메모리 해제)
         else if (strcmp(command, "close") == 0) {
-            if (current_file.buffer == NULL) {
-                printf("현재 메모리에 열려있는 파일이 없습니다.\n");
-            } else {
-                // 안전하게 메모리 파기
-                close_file(current_file.buffer, current_file.size);
-                
-                // 구조체 상태를 다시 초기화
-                current_file.buffer = NULL;
-                current_file.size = 0;
-                memset(current_file.fn, 0, FN_MAX);
-            }
+        	if (gpg_count == 0)
+        	{
+        		printf("No opened file. Current : %2d\n",gpg_count);
+        		continue;
+        	}
+        	else
+        	{
+        		int i;
+
+        		printf("close file : ");
+            	fgets(filename,FN_MAX,stdin);
+            	filename[strcspn(filename, "\n")] = '\0';
+
+        		for (i=0; i<MAX_FILE_GPG; i++)
+            	{
+            		if((current_file[i].is_opened == OPENED) && (strcmp(filename, current_file[i].fn) == 0))
+            		{
+            			break;
+            		}
+            	}
+
+	            close_file(current_file[i].fn, current_file[i].pwd);
+
+	            gpg_count--;
+	            current_file[i].is_opened = NOT_OPENED;
+        	}
+        }
+        else if (strcmp(command, "list") == 0) {
+            show_current_gpg(current_file);
         }
 
         else {
-            printf("알 수 없는 명령어입니다. (lock, open, unlock, close, exit)\n");
+            printf("unknown comamnds. (lock, open, unlock, close, exit)\n");
         }
     }
 
