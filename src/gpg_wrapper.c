@@ -4,12 +4,13 @@
 #include <gpgme.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <termios.h>
+
+#include "gpg_wrapper.h"
 
 #define FN_MAX 1024
 #define PASSWORD_MAX 1024
-#define PASSWORD_ERROR -1
-
-#define FILE_OPEN_ERROR -1
 
 void gpg_init()
 {
@@ -47,6 +48,13 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 // lock file fn
 int lock_file(char fn[], char pwd[])
 {
+
+
+
+
+
+
+
 	gpgme_ctx_t ctx;
 	gpgme_error_t err;
 	gpgme_data_t in_data, out_data;
@@ -129,6 +137,11 @@ int lock_file(char fn[], char pwd[])
 	else
 	{
 		printf("\nfile %s locked successfully!\noutput file : %s\n", input_path, output_path);
+		if (remove(input_path) == 0) {
+            
+        } else {
+            perror("failed to remove file %s. please remove file self.\n");
+        }
 	}
 
 
@@ -139,9 +152,46 @@ int lock_file(char fn[], char pwd[])
 cleanup:
 	fclose(in_file);
 	fclose(out_file);
+
+
 	gpgme_release(ctx);
 
 	return 0;
+}
+
+int gpg_lock(char fn[], char pwd[])
+{
+	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
+
+
+	if (fn == NULL)
+	{
+		printf("Enter file name :");
+		fgets(input_fn, FN_MAX - 1,stdin);
+
+		fn = input_fn;
+	}
+
+	if (pwd == NULL)
+	{
+		printf("Enter password:");
+		fgets(input_pwd, PASSWORD_MAX - 1,stdin);
+
+		pwd = input_pwd;
+	}
+
+
+	return 0;
+}
+
+int open_file(char fn[], char pwd[])
+{
+	return 1;
+}
+
+int unlock_file(char fn[], char pwd[])
+{
+	return 1;
 }
 
 
