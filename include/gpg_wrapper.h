@@ -7,6 +7,8 @@
 #define PASSWORD_MAX 1024
 #define MAX_FILE_GPG 20
 
+#define GPG_SUCCESS 0
+
 typedef struct
 {
 	char fn[FN_MAX];

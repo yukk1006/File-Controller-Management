@@ -377,7 +377,7 @@ cleanup:
 
 int gpg_lock(char fn[], char pwd[])
 {
-	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
+	char input_fn[FN_MAX] = {0}, input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
 
 
 	if (fn == NULL)
@@ -385,25 +385,31 @@ int gpg_lock(char fn[], char pwd[])
 		printf("Enter file name :");
 		fgets(input_fn, FN_MAX - 1,stdin);
 
+		input_fn[strcspn(input_fn, "\n")] = '\0';
+
 		fn = input_fn;
 	}
 
 	if (pwd == NULL)
 	{
 pwd:
-		printf("Enter password:");
-		fgets(input_pwd, PASSWORD_MAX - 1,stdin);
+		printf("Enter password\t:");
+		fgets(input_pwd1, PASSWORD_MAX - 1,stdin);
+		input_pwd1[strcspn(input_pwd1, "\n")] = '\0';
 
-		strncpy(pwd, input_pwd, PASSWORD_MAX);
+		printf("Confirm password\t:");
 
-		fgets(input_pwd, PASSWORD_MAX - 1,stdin);
+		fgets(input_pwd2, PASSWORD_MAX - 1,stdin);
+		input_pwd2[strcspn(input_pwd2, "\n")] = '\0';
 
-		if(strcmp(pwd, input_pwd) != 0)
+		if(strcmp(input_pwd1, input_pwd2) != 0)
 		{
-			printf("password does not match. please try again\n");
+			printf("password does not match. please try again\n\n");
 
 			goto pwd;
 		}
+
+		pwd = input_pwd1;
 
 	}
 
@@ -417,12 +423,101 @@ pwd:
 int main()
 {
 	
-	MemoryFile mem_files[MAX_FILE_GPG];
+	char command[FN_MAX * 3];
+	char filename[FN_MAX];
+	char password[PASSWORD_MAX];
 
-	while (1)
-	{
+	MemoryFile current_file = {"", NULL, 0};
 
-	}
+	printf("system\n");
+
+	// char cmd[FN_MAX*3];
+
+	while (1) {
+        printf("\nenter command >> ");
+        if (fgets(command, sizeof(command), stdin) == NULL) break;
+        command[strcspn(command, "\n")] = '\0';
+
+        // 1. exit (종료)
+        if (strcmp(command, "exit") == 0) {
+            if (current_file.buffer != NULL) {
+                close_file(current_file.buffer, current_file.size);
+            }
+            printf("exit program.\n");
+            break;
+        }
+
+        // 2. lock (파일 잠금)
+        else if (strcmp(command, "lock") == 0) {
+            printf("file name: ");
+            fgets(filename, FN_MAX, stdin);
+            filename[strcspn(filename, "\n")] = '\0';
+
+            printf("password: ");
+            fgets(password, PASSWORD_MAX, stdin);
+            password[strcspn(password, "\n")] = '\0';
+
+            lock_file(filename, password);
+            memset(password, 0, PASSWORD_MAX); // 보안 파기
+        }
+
+        // 3. open (메모리로 로드)
+        else if (strcmp(command, "open") == 0) {
+            // 구조체의 buffer가 NULL이 아니면 이미 로드된 상태
+            if (current_file.buffer != NULL) {
+                printf("이미 열려있는 파일(%s)이 있습니다. 먼저 close 하세요.\n", current_file.fn);
+                continue;
+            }
+
+            printf("열 파일명(확장자 제외): ");
+            fgets(filename, FN_MAX, stdin);
+            filename[strcspn(filename, "\n")] = '\0';
+
+            printf("비밀번호 입력: ");
+            fgets(password, PASSWORD_MAX, stdin);
+            password[strcspn(password, "\n")] = '\0';
+
+            // 구조체 내부 변수들의 주소값을 전달하여 데이터 채우기
+            if (open_file(filename, password, &current_file.buffer, &current_file.size) == GPG_SUCCESS) {
+                strncpy(current_file.fn, filename, FN_MAX); // 파일명 저장
+                printf("--- [%s] 내용 ---\n%s\n----------------\n", current_file.fn, current_file.buffer);
+            }
+            memset(password, 0, PASSWORD_MAX); // 보안 파기
+        }
+
+        // 4. unlock (파일 복원)
+        else if (strcmp(command, "unlock") == 0) {
+            printf("잠금 해제할 파일명(확장자 제외): ");
+            fgets(filename, FN_MAX, stdin);
+            filename[strcspn(filename, "\n")] = '\0';
+
+            printf("비밀번호 입력: ");
+            fgets(password, PASSWORD_MAX, stdin);
+            password[strcspn(password, "\n")] = '\0';
+
+            unlock_file(filename, password);
+            memset(password, 0, PASSWORD_MAX); // 보안 파기
+        }
+
+        // 5. close (메모리 해제)
+        else if (strcmp(command, "close") == 0) {
+            if (current_file.buffer == NULL) {
+                printf("현재 메모리에 열려있는 파일이 없습니다.\n");
+            } else {
+                // 안전하게 메모리 파기
+                close_file(current_file.buffer, current_file.size);
+                
+                // 구조체 상태를 다시 초기화
+                current_file.buffer = NULL;
+                current_file.size = 0;
+                memset(current_file.fn, 0, FN_MAX);
+            }
+        }
+
+        else {
+            printf("알 수 없는 명령어입니다. (lock, open, unlock, close, exit)\n");
+        }
+    }
 
 	return 0;
 }
