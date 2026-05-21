@@ -255,9 +255,13 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 
 	FILE* in_file, *out_file;
 
-	char input_path[FN_MAX];
-	snprintf(input_path, sizeof(input_path), "%s.gpg", fn);
-	const char *output_path = fn;
+	const char *input_path = fn;
+	char output_path[FN_MAX] = {0};
+
+	strncpy(output_path, fn, FN_MAX);
+	char *ext = strstr(output_path, ".gpg");
+	if(ext != NULL && *(ext + 4) == '\0')
+		*ext = '\0';
 	
 
 	gpg_init();
@@ -316,7 +320,7 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 	}
 
 
-	// lock file
+	// unlock file
 
 	printf("unlocking file %s...\n", input_path);
 
@@ -329,6 +333,17 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 	else
 	{
 		printf("\nfile %s unlocked successfully!\noutput file : %s\n", input_path, output_path);
+
+
+		if(chmod(output_path, mode) == 0)
+		{
+			printf("Original file permissions applied to %s.\n", output_path);
+		}
+		else
+		{
+			perror("Failed to apply permissions.");
+		}
+
 		if (remove(input_path) == 0) {
             
         } else {
@@ -519,7 +534,7 @@ int main()
             		}
             	}
 
-            	printf("open file (without .gpg): ");
+            	printf("open file: ");
             	fgets(current_file[i].fn,FN_MAX,stdin);
             	current_file[i].fn[strcspn(current_file[i].fn, "\n")] = '\0';
 
@@ -532,6 +547,9 @@ int main()
 
 	            gpg_count++;
 	            current_file[i].is_opened = OPENED;
+	            char *ext = strstr(current_file[i].fn, ".gpg");
+	            if (ext != NULL && *(ext + 4) == '\0')
+	            	*ext = '\0';
         	}
             
 
@@ -539,7 +557,7 @@ int main()
 
         // 4. unlock (파일 복원)
         else if (strcmp(command, "unlock") == 0) {
-            printf("filename (without .gpg): ");
+            printf("filename: ");
             fgets(filename, FN_MAX, stdin);
             filename[strcspn(filename, "\n")] = '\0';
 

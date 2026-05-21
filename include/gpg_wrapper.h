@@ -19,13 +19,13 @@ typedef struct
 	int is_opened;
 } MemoryFile;
 
-int lock_file(char fn[], char pwd[], mode_t mode);
+// int lock_file(char fn[], char pwd[], mode_t mode);
 
-int unlock_file(char fn[], char pwd[], mode_t mode);
+// int unlock_file(char fn[], char pwd[], mode_t mode);
 
-int lock_directory(char fn[], char pwd[], mode_t mode);
+// int lock_directory(char fn[], char pwd[], mode_t mode);
 
-int unlock_directory(char fn[], char pwd[], mode_t mode);
+// int unlock_directory(char fn[], char pwd[], mode_t mode);
 
 int open_file(char fn[], char pwd[]);
 
