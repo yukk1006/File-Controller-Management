@@ -52,6 +52,39 @@ int check_stat(const char *path, mode_t *out_mode)
 	return 0;
 }
 
+void get_fn(char fn[])
+{
+	printf("Enter file name :");
+	fgets(fn, FN_MAX - 1,stdin);
+
+	fn[strcspn(fn, "\n")] = '\0';
+}
+
+void get_password(char pwd[])
+{
+	char input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
+
+pwd:
+	printf("Enter password\t:");
+	fgets(input_pwd1, PASSWORD_MAX - 1,stdin);
+	input_pwd1[strcspn(input_pwd1, "\n")] = '\0';
+
+	printf("Confirm password\t:");
+
+	fgets(input_pwd2, PASSWORD_MAX - 1,stdin);
+	input_pwd2[strcspn(input_pwd2, "\n")] = '\0';
+
+	if(strcmp(input_pwd1, input_pwd2) != 0)
+	{
+		printf("password does not match. please try again\n\n");
+
+		goto pwd;
+	}
+
+	strncpy(pwd,input_pwd1, PASSWORD_MAX);
+
+}
+
 // password callback
 gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphrase_info, int prev_was_bad, int fd)
 {
@@ -72,6 +105,11 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 }
 
 int lock_directory(char fn[], char pwd[], mode_t mode)
+{
+	return 0;
+}
+
+int unlock_directory(char fn[], char pwd[], mode_t mode)
 {
 	return 0;
 }
@@ -197,7 +235,9 @@ cleanup:
 
 int open_file(char fn[], char pwd[])
 {
-	return unlock_file(fn, pwd);
+	mode_t original_mode;
+	check_stat(fn, &original_mode);
+	return unlock_file(fn, pwd, original_mode);
 }
 
 int close_file(char fn[], char pwd[])
@@ -207,7 +247,7 @@ int close_file(char fn[], char pwd[])
 	return lock_file(fn, pwd, original_mode);
 }
 
-int unlock_file(char fn[], char pwd[])
+int unlock_file(char fn[], char pwd[], mode_t mode)
 {
 	gpgme_ctx_t ctx;
 	gpgme_error_t err;
@@ -312,20 +352,59 @@ cleanup:
 }
 
 
-
 int gpg_lock(char fn[], char pwd[])
 {
-	char input_fn[FN_MAX] = {0}, input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
+	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
 	mode_t original_mode = 0;
-
 
 	if (fn == NULL)
 	{
-		printf("Enter file name :");
-		fgets(input_fn, FN_MAX - 1,stdin);
+		get_fn(input_fn);
+		fn = input_fn;
+	}
+	
 
-		input_fn[strcspn(input_fn, "\n")] = '\0';
+	int stat_check = check_stat(fn, &original_mode);
+	if (stat_check == NO_PERMISSION)
+	{
+		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
 
+
+	if (pwd == NULL)
+	{
+		get_password(input_pwd);
+		pwd = input_pwd;
+	}
+	
+
+	
+
+	if (stat_check == IS_DIRECTORY)
+	{
+		lock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+	
+		lock_file(fn, pwd, original_mode);	
+	}
+
+	return 0;
+}
+
+int gpg_unlock(char fn[], char pwd[])
+{
+
+	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
+	mode_t original_mode = 0;
+
+
+	
+	if (fn == NULL)
+	{
+		get_fn(input_fn);
 		fn = input_fn;
 	}
 
@@ -339,43 +418,25 @@ int gpg_lock(char fn[], char pwd[])
 
 	if (pwd == NULL)
 	{
-pwd:
-		printf("Enter password\t:");
-		fgets(input_pwd1, PASSWORD_MAX - 1,stdin);
-		input_pwd1[strcspn(input_pwd1, "\n")] = '\0';
-
-		printf("Confirm password\t:");
-
-		fgets(input_pwd2, PASSWORD_MAX - 1,stdin);
-		input_pwd2[strcspn(input_pwd2, "\n")] = '\0';
-
-		if(strcmp(input_pwd1, input_pwd2) != 0)
-		{
-			printf("password does not match. please try again\n\n");
-
-			goto pwd;
-		}
-
-		pwd = input_pwd1;
-
+		get_password(input_pwd);
+		pwd = input_pwd;
 	}
 
 	
 
 	if (stat_check == IS_DIRECTORY)
 	{
-		lock_directory(fn, pwd, original_mode);
+		unlock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
 	
-		lock_file(fn, pwd, original_mode);	
+		unlock_file(fn, pwd, original_mode);	
 	}
-	
-
 
 	return 0;
 }
+
 
 void show_current_gpg(MemoryFile current_file[])
 {
@@ -467,7 +528,7 @@ int main()
 	            fgets(current_file[i].pwd, PASSWORD_MAX, stdin);
 	            current_file[i].pwd[strcspn(current_file[i].pwd, "\n")] = '\0';
 
-	            unlock_file(current_file[i].fn, current_file[i].pwd);
+	            gpg_unlock(current_file[i].fn, current_file[i].pwd);
 
 	            gpg_count++;
 	            current_file[i].is_opened = OPENED;
@@ -486,7 +547,7 @@ int main()
             fgets(password, PASSWORD_MAX, stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            unlock_file(filename, password);
+            gpg_unlock(filename, password);
         }
 
         // 5. close (메모리 해제)

@@ -21,12 +21,20 @@ typedef struct
 
 int lock_file(char fn[], char pwd[], mode_t mode);
 
-int unlock_file(char fn[], char pwd[]);
+int unlock_file(char fn[], char pwd[], mode_t mode);
+
+int lock_directory(char fn[], char pwd[], mode_t mode);
+
+int unlock_directory(char fn[], char pwd[], mode_t mode);
 
 int open_file(char fn[], char pwd[]);
 
 int close_file(char fn[], char pwd[]);
 
 void show_current_gpg(MemoryFile current_file[]);
+
+int gpg_unlock(char fn[], char pwd[]);
+
+int gpg_lock(char fn[], char pwd[]);
 
 #endif
