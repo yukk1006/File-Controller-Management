@@ -52,6 +52,20 @@ int check_stat(const char *path, mode_t *out_mode)
 	return 0;
 }
 
+int is_str_end(const char * fn, const char *compair)
+{
+	size_t len_fn = strlen(fn);
+	size_t len_cmp = strlen(compair);
+	if(len_fn > len_cmp)
+	{
+		if (strcmp(fn + len_fn - len_cmp, compair) == 0)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
 void get_fn(char fn[])
 {
 	printf("Enter file name :");
@@ -104,15 +118,6 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 	return 0;
 }
 
-int lock_directory(char fn[], char pwd[], mode_t mode)
-{
-	return 0;
-}
-
-int unlock_directory(char fn[], char pwd[], mode_t mode)
-{
-	return 0;
-}
 
 
 // lock file fn
@@ -231,20 +236,6 @@ cleanup:
 	gpgme_release(ctx);
 
 	return 0;
-}
-
-int open_file(char fn[], char pwd[])
-{
-	mode_t original_mode;
-	check_stat(fn, &original_mode);
-	return unlock_file(fn, pwd, original_mode);
-}
-
-int close_file(char fn[], char pwd[])
-{
-	mode_t original_mode;
-	check_stat(fn, &original_mode);
-	return lock_file(fn, pwd, original_mode);
 }
 
 int unlock_file(char fn[], char pwd[], mode_t mode)
@@ -367,6 +358,115 @@ cleanup:
 }
 
 
+int lock_directory(char fn[], char pwd[], mode_t mode)
+{
+	char tar_name[FN_MAX];
+	char command[FN_MAX * 2];
+
+	snprintf(tar_name, sizeof(tar_name), "%s.tar", fn);
+
+	printf("converting directory %s to %s ...\n",fn, tar_name);
+	snprintf(command, sizeof(command), "tar -cf %s %s", tar_name, fn);
+
+	if(system(command) != 0)
+	{
+		fprintf(stderr, "[ERROR] failed to converting tar.\n");
+		return FILE_OPEN_ERROR;
+	}
+	else
+	{
+		int lock_res = lock_file(tar_name, pwd, mode);
+		if (lock_res == 0)
+		{
+			if (remove(fn) == 0)
+			{
+
+	        }
+	        else
+	        {
+	            perror("failed to remove file %s. please remove file self.\n");
+	        }
+
+		}
+
+		return lock_res;
+	}
+
+
+	return 0;
+}
+
+int unlock_directory(char fn[], char pwd[], mode_t mode)
+{
+	int unlock_res = unlock_file(fn, pwd, mode);
+
+	if(unlock_res == 0)
+	{
+		char output_path[FN_MAX] = {0};
+		char command[FN_MAX * 2] = {0};
+
+		strncpy(output_path, fn, FN_MAX);
+		char *ext = strstr(output_path, ".gpg");
+		if(ext != NULL && *(ext+4) == '\0')
+			*ext = '\0';
+
+		printf("converting %s to %s ...\n", fn, output_path);
+		snprintf(command, sizeof(command), "tar -xf %s", output_path);
+
+		if(system(command) == 0)
+		{
+			remove(output_path);
+			printf("unlocking completed\n");
+		}
+		else
+		{
+			fprintf(stderr, "[Error] failed to unlocking tar files.");
+		}
+	}
+
+	return unlock_res;
+}
+
+int open_file(char fn[], char pwd[])
+{
+	mode_t original_mode;
+	check_stat(fn, &original_mode);
+
+	if (is_str_end(fn, ".tar.gpg") != 0)
+	{
+		return unlock_file(fn, pwd, original_mode);
+	}
+	else
+	{
+		return unlock_directory(fn, pwd, original_mode);
+	}
+	
+}
+
+int close_file(char fn[], char pwd[])
+{
+	mode_t original_mode;
+	int stat_check = check_stat(fn, &original_mode);
+
+	if(stat_check == NO_PERMISSION)
+	{
+		printf("[ERROR] File %s does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
+
+	if(stat_check == IS_DIRECTORY)
+	{
+		return lock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+		return lock_file(fn, pwd, original_mode);
+	}
+}
+
+
+
+
 int gpg_lock(char fn[], char pwd[])
 {
 	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
@@ -414,14 +514,20 @@ int gpg_unlock(char fn[], char pwd[])
 
 	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
 	mode_t original_mode = 0;
-
-
 	
 	if (fn == NULL)
 	{
 		get_fn(input_fn);
 		fn = input_fn;
 	}
+
+	if(is_str_end(fn, ".gpg") != 0)
+	{
+		printf("file %s is not locked file.\n", fn);
+		return FILE_OPEN_ERROR;
+	
+	}
+		
 
 	int stat_check = check_stat(fn, &original_mode);
 	if (stat_check == NO_PERMISSION)
@@ -437,17 +543,16 @@ int gpg_unlock(char fn[], char pwd[])
 		pwd = input_pwd;
 	}
 
-	
 
-	if (stat_check == IS_DIRECTORY)
+	if(is_str_end(fn, ".tar.gpg") != 0)
 	{
-		unlock_directory(fn, pwd, original_mode);
+		unlock_file(fn, pwd, original_mode);
 	}
 	else
 	{
-	
-		unlock_file(fn, pwd, original_mode);	
+		unlock_directory(fn, pwd, original_mode);
 	}
+
 
 	return 0;
 }
@@ -547,9 +652,20 @@ int main()
 
 	            gpg_count++;
 	            current_file[i].is_opened = OPENED;
-	            char *ext = strstr(current_file[i].fn, ".gpg");
-	            if (ext != NULL && *(ext + 4) == '\0')
-	            	*ext = '\0';
+
+	            if (is_str_end(current_file[i].fn, ".tar.gpg") != 0)
+	            {
+	            	char *ext = strstr(current_file[i].fn, ".gpg");
+		            if (ext != NULL && *(ext + 4) == '\0')
+		            	*ext = '\0';
+	            }
+	            else
+	            {
+	            	char *ext = strstr(current_file[i].fn, ".tar.gpg");
+		            if (ext != NULL && *(ext + 8) == '\0')
+		            	*ext = '\0';
+	            }
+	            
         	}
             
 
