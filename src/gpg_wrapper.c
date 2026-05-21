@@ -6,11 +6,15 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <sys/stat.h>
 
 #include "gpg_wrapper.h"
 
 #define NOT_OPENED 0
 #define OPENED 1
+
+
+#define NO_PERMISSION -1
 
 
 void gpg_init()
@@ -24,6 +28,28 @@ void gpg_init()
 	gpgme_set_locale(NULL, LC_MESSAGES, setlocale(LC_MESSAGES, NULL));
 #endif
 
+}
+
+int check_stat(const char *path, mode_t *out_mode)
+{
+	struct stat st;
+
+	if (stat(path, &st) != 0)
+	{
+		return NO_PERMISSION;
+	}
+
+	if(out_mode != NULL)
+	{
+		*out_mode = st.st_mode & 0777;
+	}
+
+	if (S_ISDIR(st.st_mode))
+	{
+		return 1;
+	}
+
+	return 0;
 }
 
 // password callback
@@ -47,15 +73,8 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 
 
 // lock file fn
-int lock_file(char fn[], char pwd[])
+int lock_file(char fn[], char pwd[], mode_t mode)
 {
-
-
-
-
-
-
-
 	gpgme_ctx_t ctx;
 	gpgme_error_t err;
 	gpgme_data_t in_data, out_data;
@@ -138,6 +157,17 @@ int lock_file(char fn[], char pwd[])
 	else
 	{
 		printf("\nfile %s locked successfully!\noutput file : %s\n", input_path, output_path);
+
+		if(chmod(output_path, mode) == 0)
+		{
+			printf("Original file permissions applied to %s.\n", output_path);
+		}
+		else
+		{
+			perror("Failed to apply permissions.");
+		}
+
+		
 		if (remove(input_path) == 0) {
             
         } else {
@@ -279,6 +309,7 @@ cleanup:
 int gpg_lock(char fn[], char pwd[])
 {
 	char input_fn[FN_MAX] = {0}, input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
+	mode_t original_mode = 0;
 
 
 	if (fn == NULL)
@@ -290,6 +321,15 @@ int gpg_lock(char fn[], char pwd[])
 
 		fn = input_fn;
 	}
+
+	int stat_check = check_stat(fn, &original_mode);
+
+	if (stat_res == NO_PERMISSION)
+	{
+		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
+
 
 	if (pwd == NULL)
 	{
@@ -314,7 +354,16 @@ pwd:
 
 	}
 
-	lock_file(fn, pwd);
+	
+	if (stat_res)
+	{
+		lock_file(fn, pwd, original_mode);	
+	}
+	else
+	{
+		lock_directory(fn, pwd, original_mode);
+	}
+	
 
 
 	return 0;
