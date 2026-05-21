@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <sys/stat.h>
 
 #include "gpg_wrapper.h"
 
@@ -15,6 +14,7 @@
 
 
 #define NO_PERMISSION -1
+#define IS_DIRECTORY 1
 
 
 void gpg_init()
@@ -68,6 +68,11 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 	write(fd, password, strlen(password));
 	write(fd, "\n", 1);
 
+	return 0;
+}
+
+int lock_directory(char fn[], char pwd[], mode_t mode)
+{
 	return 0;
 }
 
@@ -167,7 +172,7 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 			perror("Failed to apply permissions.");
 		}
 
-		
+
 		if (remove(input_path) == 0) {
             
         } else {
@@ -197,7 +202,9 @@ int open_file(char fn[], char pwd[])
 
 int close_file(char fn[], char pwd[])
 {
-	return lock_file(fn, pwd);
+	mode_t original_mode;
+	check_stat(fn, &original_mode);
+	return lock_file(fn, pwd, original_mode);
 }
 
 int unlock_file(char fn[], char pwd[])
@@ -323,8 +330,7 @@ int gpg_lock(char fn[], char pwd[])
 	}
 
 	int stat_check = check_stat(fn, &original_mode);
-
-	if (stat_res == NO_PERMISSION)
+	if (stat_check == NO_PERMISSION)
 	{
 		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
 		return FILE_OPEN_ERROR;
@@ -355,13 +361,15 @@ pwd:
 	}
 
 	
-	if (stat_res)
+
+	if (stat_check == IS_DIRECTORY)
 	{
-		lock_file(fn, pwd, original_mode);	
+		lock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		lock_directory(fn, pwd, original_mode);
+	
+		lock_file(fn, pwd, original_mode);	
 	}
 	
 
@@ -429,7 +437,7 @@ int main()
             fgets(password, PASSWORD_MAX, stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            lock_file(filename, password);
+            gpg_lock(filename, password);
         }
 
         // 3. open (메모리로 로드)

@@ -1,6 +1,9 @@
 #ifndef GPG_WRAPPER_H
 #define GPG_WRAPPER_H
 
+
+#include <sys/stat.h>
+
 #define PASSWORD_ERROR -1
 #define FILE_OPEN_ERROR -1
 #define FN_MAX 1024
@@ -16,7 +19,7 @@ typedef struct
 	int is_opened;
 } MemoryFile;
 
-int lock_file(char fn[], char pwd[]);
+int lock_file(char fn[], char pwd[], mode_t mode);
 
 int unlock_file(char fn[], char pwd[]);
 
