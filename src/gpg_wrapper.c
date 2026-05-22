@@ -432,13 +432,13 @@ int open_file(char fn[], char pwd[])
 	mode_t original_mode;
 	check_stat(fn, &original_mode);
 
-	if (is_str_end(fn, ".tar.gpg") != 0)
+	if (is_str_end(fn, ".tar.gpg"))
 	{
-		return unlock_file(fn, pwd, original_mode);
+		return unlock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		return unlock_directory(fn, pwd, original_mode);
+		return unlock_file(fn, pwd, original_mode);
 	}
 	
 }
@@ -521,7 +521,7 @@ int gpg_unlock(char fn[], char pwd[])
 		fn = input_fn;
 	}
 
-	if(is_str_end(fn, ".gpg") != 0)
+	if(is_str_end(fn, ".gpg") == 0)
 	{
 		printf("file %s is not locked file.\n", fn);
 		return FILE_OPEN_ERROR;
@@ -544,13 +544,13 @@ int gpg_unlock(char fn[], char pwd[])
 	}
 
 
-	if(is_str_end(fn, ".tar.gpg") != 0)
+	if(is_str_end(fn, ".tar.gpg"))
 	{
-		unlock_file(fn, pwd, original_mode);
+		unlock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		unlock_directory(fn, pwd, original_mode);
+		unlock_file(fn, pwd, original_mode);
 	}
 
 
@@ -653,17 +653,18 @@ int main()
 	            gpg_count++;
 	            current_file[i].is_opened = OPENED;
 
-	            if (is_str_end(current_file[i].fn, ".tar.gpg") != 0)
-	            {
-	            	char *ext = strstr(current_file[i].fn, ".gpg");
-		            if (ext != NULL && *(ext + 4) == '\0')
-		            	*ext = '\0';
-	            }
-	            else
+	            if (is_str_end(current_file[i].fn, ".tar.gpg"))
 	            {
 	            	char *ext = strstr(current_file[i].fn, ".tar.gpg");
 		            if (ext != NULL && *(ext + 8) == '\0')
 		            	*ext = '\0';
+	            }
+	            else
+	            {
+	            	char *ext = strstr(current_file[i].fn, ".gpg");
+		            if (ext != NULL && *(ext + 4) == '\0')
+		            	*ext = '\0';
+	            	
 	            }
 	            
         	}
