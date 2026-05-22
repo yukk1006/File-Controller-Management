@@ -12,24 +12,14 @@
 #define MAX_PATH_LEN 1024
 
 void handle_sigint(int signo) {
-    char answer[32];
-
     (void)signo;
 
-    printf("\n정말로 종료하시겠습니까? (y/n): ");
-    fflush(stdout);
+    printf("\nCtrl+C 입력 감지. 열린 파일/디렉토리를 자동 close합니다...\n");
 
-    if (fgets(answer, sizeof(answer), stdin) == NULL) {
-        clearerr(stdin);
-        return;
-    }
+    auth_close_all_open_files();
 
-    if (answer[0] == 'y' || answer[0] == 'Y') {
-        printf("Factoreal을 종료합니다.\n");
-        exit(0);
-    }
-
-    printf("프로그램을 계속 실행합니다.\n");
+    printf("Factoreal을 종료합니다.\n");
+    exit(0);
 }
 
 static void print_usage(void) {
@@ -115,10 +105,13 @@ static void execute_command(const char *command, const char *path_arg) {
     }
 
     if (strcmp(command, "exit") == 0) {
+
         if (ask_exit_confirm()) {
+            printf("열린 파일/디렉토리를 자동 close합니다...\n");
+            auth_close_all_open_files();
+            printf("Factoreal을 종료합니다.\n");
             exit(0);
         }
-        return;
     }
 
     if (path_arg == NULL) {
