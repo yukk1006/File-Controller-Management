@@ -4,11 +4,18 @@
 #include <gpgme.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <termios.h>
 
-#define FN_MAX 1024
-#define PASSWORD_MAX 1024
+#include "gpg_wrapper.h"
 
-#define FILE_OPEN_ERROR -1
+#define NOT_OPENED 0
+#define OPENED 1
+
+
+#define NO_PERMISSION -1
+#define IS_DIRECTORY 1
+
 
 void gpg_init()
 {
@@ -23,6 +30,75 @@ void gpg_init()
 
 }
 
+int check_stat(const char *path, mode_t *out_mode)
+{
+	struct stat st;
+
+	if (stat(path, &st) != 0)
+	{
+		return NO_PERMISSION;
+	}
+
+	if(out_mode != NULL)
+	{
+		*out_mode = st.st_mode & 0777;
+	}
+
+	if (S_ISDIR(st.st_mode))
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+int is_str_end(const char * fn, const char *compair)
+{
+	size_t len_fn = strlen(fn);
+	size_t len_cmp = strlen(compair);
+	if(len_fn > len_cmp)
+	{
+		if (strcmp(fn + len_fn - len_cmp, compair) == 0)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void get_fn(char fn[])
+{
+	printf("Enter file name :");
+	fgets(fn, FN_MAX - 1,stdin);
+
+	fn[strcspn(fn, "\n")] = '\0';
+}
+
+void get_password(char pwd[])
+{
+	char input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
+
+pwd:
+	printf("Enter password\t:");
+	fgets(input_pwd1, PASSWORD_MAX - 1,stdin);
+	input_pwd1[strcspn(input_pwd1, "\n")] = '\0';
+
+	printf("Confirm password\t:");
+
+	fgets(input_pwd2, PASSWORD_MAX - 1,stdin);
+	input_pwd2[strcspn(input_pwd2, "\n")] = '\0';
+
+	if(strcmp(input_pwd1, input_pwd2) != 0)
+	{
+		printf("password does not match. please try again\n\n");
+
+		goto pwd;
+	}
+
+	strncpy(pwd,input_pwd1, PASSWORD_MAX);
+
+}
+
 // password callback
 gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphrase_info, int prev_was_bad, int fd)
 {
@@ -31,7 +107,7 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 
 	if (prev_was_bad)
 	{
-		fprintf(stderr, "\n[ERROR] Password is not correct.\n");
+		fprintf(stderr, "\n[ERROR] Password is not same.\n");
 		return GPG_ERR_CANCELED;
 	}
 
@@ -43,8 +119,9 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 }
 
 
+
 // lock file fn
-int lock_file(char fn[], char pwd[])
+int lock_file(char fn[], char pwd[], mode_t mode)
 {
 	gpgme_ctx_t ctx;
 	gpgme_error_t err;
@@ -117,7 +194,7 @@ int lock_file(char fn[], char pwd[])
 
 	// lock file
 
-	printf("lockking file %s...\n", input_path);
+	printf("locking file %s...\n", input_path);
 
 	err = gpgme_op_encrypt(ctx, NULL, GPGME_ENCRYPT_SYMMETRIC, in_data, out_data);
 
@@ -128,6 +205,22 @@ int lock_file(char fn[], char pwd[])
 	else
 	{
 		printf("\nfile %s locked successfully!\noutput file : %s\n", input_path, output_path);
+
+		if(chmod(output_path, mode) == 0)
+		{
+			printf("Original file permissions applied to %s.\n", output_path);
+		}
+		else
+		{
+			perror("Failed to apply permissions.");
+		}
+
+
+		if (remove(input_path) == 0) {
+            
+        } else {
+            perror("failed to remove file %s. please remove file self.\n");
+        }
 	}
 
 
@@ -138,16 +231,345 @@ int lock_file(char fn[], char pwd[])
 cleanup:
 	fclose(in_file);
 	fclose(out_file);
+
+
+	gpgme_release(ctx);
+
+	return 0;
+}
+
+int unlock_file(char fn[], char pwd[], mode_t mode)
+{
+	gpgme_ctx_t ctx;
+	gpgme_error_t err;
+	gpgme_data_t in_data, out_data;
+
+	FILE* in_file, *out_file;
+
+	const char *input_path = fn;
+	char output_path[FN_MAX] = {0};
+
+	strncpy(output_path, fn, FN_MAX);
+	char *ext = strstr(output_path, ".gpg");
+	if(ext != NULL && *(ext + 4) == '\0')
+		*ext = '\0';
+	
+
+	gpg_init();
+
+
+	err = gpgme_new(&ctx);
+
+	if(err)
+	{
+		fprintf(stderr, "GPGME context error: %s\n", gpgme_strerror(err));
+		return 1;
+	}
+
+	gpgme_set_protocol(ctx, GPGME_PROTOCOL_OpenPGP);
+
+	gpgme_set_pinentry_mode(ctx, GPGME_PINENTRY_MODE_LOOPBACK);
+
+	gpgme_set_passphrase_cb(ctx, password_cb, (void *) pwd);
+
+
+	// open file
+	in_file = fopen(input_path, "rb");
+	if (!in_file)
+	{
+		perror("there is no file locked.\n");
+		gpgme_release(ctx);
+		return FILE_OPEN_ERROR;
+	}
+
+	out_file = fopen(output_path, "wb");
+	if(!out_file)
+	{
+		perror("can't create unlocked file.\n");
+		fclose(in_file);
+		gpgme_release(ctx);
+		return FILE_OPEN_ERROR;
+	}
+
+
+	// connect file to gpg
+	err = gpgme_data_new_from_stream(&in_data, in_file);
+
+	if(err)
+	{
+		fprintf(stderr, "cannot create in_data : %s\n", gpgme_strerror(err));
+		goto cleanup;
+	}
+
+	err = gpgme_data_new_from_stream(&out_data, out_file);
+
+	if(err)
+	{
+		fprintf(stderr, "cannot create out_data : %s\n", gpgme_strerror(err));
+		gpgme_data_release(in_data);
+		goto cleanup;
+	}
+
+
+	// unlock file
+
+	printf("unlocking file %s...\n", input_path);
+
+	err = gpgme_op_decrypt(ctx, in_data, out_data);
+
+	if (err)
+	{
+		fprintf(stderr, "\nfailed to unlock file %s : %s\n", input_path, gpgme_strerror(err));
+	}
+	else
+	{
+		printf("\nfile %s unlocked successfully!\noutput file : %s\n", input_path, output_path);
+
+
+		if(chmod(output_path, mode) == 0)
+		{
+			printf("Original file permissions applied to %s.\n", output_path);
+		}
+		else
+		{
+			perror("Failed to apply permissions.");
+		}
+
+		if (remove(input_path) == 0) {
+            
+        } else {
+            perror("failed to remove file %s. please remove file self.\n");
+        }
+	}
+
+
+	gpgme_data_release(in_data);
+	gpgme_data_release(out_data);
+
+
+cleanup:
+	fclose(in_file);
+	fclose(out_file);
+
+
 	gpgme_release(ctx);
 
 	return 0;
 }
 
 
-int main()
+int lock_directory(char fn[], char pwd[], mode_t mode)
 {
-	
-	lock_file("secret.txt", "1234");
+	char tar_name[FN_MAX];
+	char command[FN_MAX * 2];
+
+	snprintf(tar_name, sizeof(tar_name), "%s.tar", fn);
+
+	printf("converting directory %s to %s ...\n",fn, tar_name);
+	snprintf(command, sizeof(command), "tar -cf %s %s", tar_name, fn);
+
+	if(system(command) != 0)
+	{
+		fprintf(stderr, "[ERROR] failed to converting tar.\n");
+		return FILE_OPEN_ERROR;
+	}
+	else
+	{
+		int lock_res = lock_file(tar_name, pwd, mode);
+		if (lock_res == 0)
+		{
+			if (remove(fn) == 0)
+			{
+
+	        }
+	        else
+	        {
+	            perror("failed to remove file %s. please remove file self.\n");
+	        }
+
+		}
+
+		return lock_res;
+	}
+
 
 	return 0;
 }
+
+int unlock_directory(char fn[], char pwd[], mode_t mode)
+{
+	int unlock_res = unlock_file(fn, pwd, mode);
+
+	if(unlock_res == 0)
+	{
+		char output_path[FN_MAX] = {0};
+		char command[FN_MAX * 2] = {0};
+
+		strncpy(output_path, fn, FN_MAX);
+		char *ext = strstr(output_path, ".gpg");
+		if(ext != NULL && *(ext+4) == '\0')
+			*ext = '\0';
+
+		printf("converting %s to %s ...\n", fn, output_path);
+		snprintf(command, sizeof(command), "tar -xf %s", output_path);
+
+		if(system(command) == 0)
+		{
+			remove(output_path);
+			printf("unlocking completed\n");
+		}
+		else
+		{
+			fprintf(stderr, "[Error] failed to unlocking tar files.");
+		}
+	}
+
+	return unlock_res;
+}
+
+int open_file(char fn[], char pwd[])
+{
+	mode_t original_mode;
+	check_stat(fn, &original_mode);
+
+	if (is_str_end(fn, ".tar.gpg"))
+	{
+		return unlock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+		return unlock_file(fn, pwd, original_mode);
+	}
+	
+}
+
+int close_file(char fn[], char pwd[])
+{
+	mode_t original_mode;
+	int stat_check = check_stat(fn, &original_mode);
+
+	if(stat_check == NO_PERMISSION)
+	{
+		printf("[ERROR] File %s does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
+
+	if(stat_check == IS_DIRECTORY)
+	{
+		return lock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+		return lock_file(fn, pwd, original_mode);
+	}
+}
+
+
+
+
+int gpg_lock(char fn[], char pwd[])
+{
+	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
+	mode_t original_mode = 0;
+
+	if (fn == NULL)
+	{
+		get_fn(input_fn);
+		fn = input_fn;
+	}
+	
+
+	int stat_check = check_stat(fn, &original_mode);
+	if (stat_check == NO_PERMISSION)
+	{
+		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
+
+
+	if (pwd == NULL)
+	{
+		get_password(input_pwd);
+		pwd = input_pwd;
+	}
+	
+
+	
+
+	if (stat_check == IS_DIRECTORY)
+	{
+		lock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+	
+		lock_file(fn, pwd, original_mode);	
+	}
+
+	return 0;
+}
+
+int gpg_unlock(char fn[], char pwd[])
+{
+
+	char input_fn[FN_MAX] = {0}, input_pwd[PASSWORD_MAX] = {0};
+	mode_t original_mode = 0;
+	
+	if (fn == NULL)
+	{
+		get_fn(input_fn);
+		fn = input_fn;
+	}
+
+	if(is_str_end(fn, ".gpg") == 0)
+	{
+		printf("file %s is not locked file.\n", fn);
+		return FILE_OPEN_ERROR;
+	
+	}
+		
+
+	int stat_check = check_stat(fn, &original_mode);
+	if (stat_check == NO_PERMISSION)
+	{
+		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		return FILE_OPEN_ERROR;
+	}
+
+
+	if (pwd == NULL)
+	{
+		get_password(input_pwd);
+		pwd = input_pwd;
+	}
+
+
+	if(is_str_end(fn, ".tar.gpg"))
+	{
+		unlock_directory(fn, pwd, original_mode);
+	}
+	else
+	{
+		unlock_file(fn, pwd, original_mode);
+	}
+
+
+	return 0;
+}
+
+
+void show_current_gpg(MemoryFile current_file[])
+{
+	int cnt = 0;
+
+	printf("========== current opened file ==========\n");
+
+	for (int i=0; i<MAX_FILE_GPG; i++)
+	{
+		if( current_file[i].is_opened == OPENED)
+		{
+			printf("%2d : %s\n",++cnt,current_file[i].fn);
+		}
+	}
+}
+
