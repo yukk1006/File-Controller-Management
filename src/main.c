@@ -1,5 +1,5 @@
 #include "auth.h"
-
+#include "gpg_wrapper.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,15 +25,26 @@ void handle_sigint(int signo) {
 static void print_usage(void) {
     printf("\n");
     printf("========== Factoreal ==========\n");
-    printf("사용 가능한 명령어:\n");
-    printf("  lock <파일/디렉토리 경로>    : 비밀번호 설정 후 Factoreal 관리 대상으로 등록\n");
-    printf("  open <파일/디렉토리 경로>    : 비밀번호 인증 후 작업용 copy 생성\n");
-    printf("  close <파일/디렉토리 경로>   : copy 내용을 원본에 반영 후 다시 잠금\n");
-    printf("  remove <파일/디렉토리 경로>  : 비밀번호 인증 후 완전 잠금 해제\n");
-    printf("  status <파일/디렉토리 경로>  : 잠금 상태 확인\n");
-    printf("  help                         : 사용법 출력\n");
-    printf("  exit                         : 프로그램 종료\n");
-    printf("================================\n\n");
+    printf("사용 가능한 명령어:\n\n");
+
+    printf("[Auth Mode - Password/chmod]\n");
+    printf("  lock <파일/디렉토리 경로>        : 비밀번호 설정 후 Factoreal 관리 대상으로 등록\n");
+    printf("  open <파일/디렉토리 경로>        : 비밀번호 인증 후 파일 copy 생성 / 디렉토리 권한 복구\n");
+    printf("  close <파일/디렉토리 경로>       : 파일 copy 반영 / 디렉토리 다시 chmod 000\n");
+    printf("  remove <파일/디렉토리 경로>      : 비밀번호 인증 후 Factoreal 관리 대상에서 제거\n");
+    printf("  status <파일/디렉토리 경로>      : Auth 관리 상태 확인\n\n");
+
+    printf("[GPG Mode - Encryption]\n");
+    printf("  gpg_lock <경로>          : GPG 방식으로 파일/디렉토리 암호화\n");
+    printf("  gpg_unlock <경로>        : GPG 방식으로 복호화\n");
+    printf("  gpg_open <경로>          : GPG 암호화 파일 open\n");
+    printf("  gpg_close <경로>         : GPG open 파일 close\n\n");
+
+    printf("[Common]\n");
+    printf("  help                             : 사용법 출력\n");
+    printf("  exit                             : 열린 항목 자동 close 후 종료\n");
+    printf("  Ctrl+C                           : 열린 항목 자동 close 후 강제 종료\n");
+    printf("==================================\n\n");
 }
 
 static int ask_exit_confirm(void) {
@@ -105,13 +116,15 @@ static void execute_command(const char *command, const char *path_arg) {
     }
 
     if (strcmp(command, "exit") == 0) {
-
         if (ask_exit_confirm()) {
             printf("열린 파일/디렉토리를 자동 close합니다...\n");
             auth_close_all_open_files();
             printf("Factoreal을 종료합니다.\n");
             exit(0);
         }
+
+        printf("프로그램을 계속 실행합니다.\n");
+        return;
     }
 
     if (path_arg == NULL) {
@@ -124,7 +137,11 @@ static void execute_command(const char *command, const char *path_arg) {
         strcmp(command, "open") != 0 &&
         strcmp(command, "close") != 0 &&
         strcmp(command, "remove") != 0 &&
-        strcmp(command, "status") != 0
+        strcmp(command, "status") != 0 &&
+        strcmp(command, "gpg_lock") != 0 &&
+        strcmp(command, "gpg_unlock") != 0 &&
+        strcmp(command, "gpg_open") != 0 &&
+        strcmp(command, "gpg_close") != 0
     ) {
         fprintf(stderr, "잘못된 명령어입니다!\n");
         return;
@@ -149,12 +166,27 @@ static void execute_command(const char *command, const char *path_arg) {
 
     if (strcmp(command, "lock") == 0) {
         result = auth_lock_file(resolved_path, password);
+
     } else if (strcmp(command, "open") == 0) {
         result = auth_open_file(resolved_path, password);
+
     } else if (strcmp(command, "close") == 0) {
         result = auth_close_file(resolved_path, password);
+
     } else if (strcmp(command, "remove") == 0) {
         result = auth_remove_lock(resolved_path, password);
+
+    } else if (strcmp(command, "gpg_lock") == 0) {
+        result = gpg_lock(resolved_path, password);
+
+    } else if (strcmp(command, "gpg_unlock") == 0) {
+        result = gpg_unlock(resolved_path, password);
+
+    } else if (strcmp(command, "gpg_open") == 0) {
+        result = open_file(resolved_path, password);
+
+    } else if (strcmp(command, "gpg_close") == 0) {
+        result = close_file(resolved_path, password);
     }
 
     if (result != 0) {
