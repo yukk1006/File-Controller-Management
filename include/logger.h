@@ -17,3 +17,5 @@
  * result: SUCCESS(1) 또는 PASSWORD_ERROR(-1)
  */
 void write_access_log(const char *filename, int result);
+
+#endif

@@ -3,6 +3,7 @@
 #include <unistd.h>     // getuid() 사용
 #include <pwd.h>        // getpwuid() 사용
 #include "logger.h"
+#include <sys/types.h>
 
 
 
