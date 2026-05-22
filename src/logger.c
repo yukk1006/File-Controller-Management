@@ -5,6 +5,7 @@
 #include "logger.h"
 
 
+
 void write_access_log(const char *filename, int result) {
     // 1. 현재 시간 정보 가져오기
     time_t now = time(NULL);
