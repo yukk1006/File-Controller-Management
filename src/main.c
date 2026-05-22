@@ -36,8 +36,9 @@ static void print_usage(void) {
     printf("\n");
     printf("========== Factoreal ==========\n");
     printf("사용 가능한 명령어:\n");
-    printf("  lock <파일/디렉토리 경로>    : 비밀번호 설정 후 chmod 000 잠금\n");
-    printf("  access <파일/디렉토리 경로>  : 비밀번호 인증 후 임시 접근\n");
+    printf("  lock <파일/디렉토리 경로>    : 비밀번호 설정 후 Factoreal 관리 대상으로 등록\n");
+    printf("  open <파일/디렉토리 경로>    : 비밀번호 인증 후 작업용 copy 생성\n");
+    printf("  close <파일/디렉토리 경로>   : copy 내용을 원본에 반영 후 다시 잠금\n");
     printf("  remove <파일/디렉토리 경로>  : 비밀번호 인증 후 완전 잠금 해제\n");
     printf("  status <파일/디렉토리 경로>  : 잠금 상태 확인\n");
     printf("  help                         : 사용법 출력\n");
@@ -106,7 +107,7 @@ static int read_password(char *buffer, size_t size) {
 static void execute_command(const char *command, const char *path_arg) {
     char resolved_path[MAX_PATH_LEN];
     char password[PASSWORD_SIZE];
-    int result;
+    int result = -1;
 
     if (strcmp(command, "help") == 0) {
         print_usage();
@@ -127,7 +128,8 @@ static void execute_command(const char *command, const char *path_arg) {
 
     if (
         strcmp(command, "lock") != 0 &&
-        strcmp(command, "access") != 0 &&
+        strcmp(command, "open") != 0 &&
+        strcmp(command, "close") != 0 &&
         strcmp(command, "remove") != 0 &&
         strcmp(command, "status") != 0
     ) {
@@ -141,9 +143,9 @@ static void execute_command(const char *command, const char *path_arg) {
 
     if (strcmp(command, "status") == 0) {
         if (auth_is_locked(resolved_path)) {
-            printf("잠금 상태입니다: %s\n", resolved_path);
+            printf("Factoreal 관리 대상입니다: %s\n", resolved_path);
         } else {
-            printf("잠금 상태가 아닙니다: %s\n", resolved_path);
+            printf("Factoreal 관리 대상이 아닙니다: %s\n", resolved_path);
         }
         return;
     }
@@ -154,9 +156,11 @@ static void execute_command(const char *command, const char *path_arg) {
 
     if (strcmp(command, "lock") == 0) {
         result = auth_lock_file(resolved_path, password);
-    } else if (strcmp(command, "access") == 0) {
-        result = auth_access(resolved_path, password);
-    } else {
+    } else if (strcmp(command, "open") == 0) {
+        result = auth_open_file(resolved_path, password);
+    } else if (strcmp(command, "close") == 0) {
+        result = auth_close_file(resolved_path, password);
+    } else if (strcmp(command, "remove") == 0) {
         result = auth_remove_lock(resolved_path, password);
     }
 

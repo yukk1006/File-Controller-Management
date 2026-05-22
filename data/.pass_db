@@ -1,2 +1,4 @@
 /home/yuk/secreteTEST/test.txt|14547217155616746534|664
 /home/yuk/secreteTEST|14547217155616746534|775
+/home/yuk/test.c|1000|1000|664|F|$argon2id$v=19$m=65536,t=2,p=1$O0bu1eE3FZ64rDYAB7ZoKw$WCpnwU7m1PCILLzg5KPTJB+MbeRd+srPZ/bL02DnRb8|LOCKED|-
+/home/yuk/testdir|1000|1000|775|D|$argon2id$v=19$m=65536,t=2,p=1$LvbW4nO4BIUjteH8teNA5w$O0Ek/Hg2PBsPZzoVsAO7/ESustGnhBSL3RWTm6AIMjI|LOCKED|-
