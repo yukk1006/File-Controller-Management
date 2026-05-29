@@ -1,6 +1,8 @@
 #ifndef AUTH_H
 #define AUTH_H
 
+#define PASS_DB "data/.pass_db"
+
 int auth_lock_file(const char *path, const char *password);
 int auth_open_file(const char *path, const char *password);
 int auth_close_file(const char *path, const char *password);
