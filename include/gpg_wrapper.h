@@ -31,10 +31,12 @@ int open_file(char fn[], char pwd[]);
 
 int close_file(char fn[], char pwd[]);
 
-void show_current_gpg(MemoryFile current_file[]);
+void show_current_gpg();
 
 int gpg_unlock(char fn[], char pwd[]);
 
 int gpg_lock(char fn[], char pwd[]);
+
+void close_opened_gpg_file();
 
 #endif

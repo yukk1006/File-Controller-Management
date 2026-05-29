@@ -8,6 +8,7 @@
 #include <termios.h>
 
 #include "gpg_wrapper.h"
+#include "auth.h"
 
 #define NOT_OPENED 0
 #define OPENED 1
@@ -16,6 +17,36 @@
 #define NO_PERMISSION -1
 #define IS_DIRECTORY 1
 
+MemoryFile gpg_memoryfile[MAX_FILE_GPG];
+int _cnt_gpg_open = 0;
+
+int gpg_open_check(const char* path)
+{
+	int i = 0;
+
+	if (path == NULL)
+	{
+		for (i = 0; i<MAX_FILE_GPG; i++)
+		{
+			if(gpg_memoryfile[i].is_opened == NOT_OPENED)
+			{
+				break;
+			}
+		}	
+	}
+	else
+	{
+		for (i=0; i<MAX_FILE_GPG; i++)
+		{
+			if(strcmp(gpg_memoryfile[i].fn,path) == 0 )
+			{
+				break;
+			}
+		}
+	}
+
+	return i;
+}
 
 void gpg_init()
 {
@@ -68,7 +99,7 @@ int is_str_end(const char * fn, const char *compair)
 
 void get_fn(char fn[])
 {
-	printf("Enter file name :");
+	printf("파일 이름(경로) :");
 	fgets(fn, FN_MAX - 1,stdin);
 
 	fn[strcspn(fn, "\n")] = '\0';
@@ -79,18 +110,18 @@ void get_password(char pwd[])
 	char input_pwd1[PASSWORD_MAX] = {0}, input_pwd2[PASSWORD_MAX] = {0};
 
 pwd:
-	printf("Enter password\t:");
+	printf("패스워드 입력\t:");
 	fgets(input_pwd1, PASSWORD_MAX - 1,stdin);
 	input_pwd1[strcspn(input_pwd1, "\n")] = '\0';
 
-	printf("Confirm password\t:");
+	printf("패스워드 확인\t:");
 
 	fgets(input_pwd2, PASSWORD_MAX - 1,stdin);
 	input_pwd2[strcspn(input_pwd2, "\n")] = '\0';
 
 	if(strcmp(input_pwd1, input_pwd2) != 0)
 	{
-		printf("password does not match. please try again\n\n");
+		printf("패스워드가 일치하지 않습니다\n\n");
 
 		goto pwd;
 	}
@@ -107,7 +138,7 @@ gpgme_error_t password_cb(void *hook, const char *uid_hint, const char *passphra
 
 	if (prev_was_bad)
 	{
-		fprintf(stderr, "\n[ERROR] Password is not same.\n");
+		fprintf(stderr, "\n[ERROR] 패스워드가 일치하지 않습니다\n");
 		return GPG_ERR_CANCELED;
 	}
 
@@ -132,6 +163,13 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 	const char *input_path = fn;
 
 	char output_path[FN_MAX];
+
+    if (strcmp(fn, PASS_DB) == 0)
+    {
+        printf("잠글 수 없는 파일입니다\n");
+        return -1;
+    }
+
 	snprintf(output_path, sizeof(output_path), "%s.gpg", input_path);
 
 	gpg_init();
@@ -158,7 +196,7 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 	in_file = fopen(input_path, "rb");
 	if (!in_file)
 	{
-		perror("there is no file to lock.\n");
+		perror("대상 파일이 존재하지 않거나 접근할 수 없습니다\n");
 		gpgme_release(ctx);
 		return FILE_OPEN_ERROR;
 	}
@@ -166,7 +204,7 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 	out_file = fopen(output_path, "wb");
 	if(!out_file)
 	{
-		perror("can't create locked file.\n");
+		perror("파일 잠금에 실패했습니다\n");
 		fclose(in_file);
 		gpgme_release(ctx);
 		return FILE_OPEN_ERROR;
@@ -194,32 +232,32 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 
 	// lock file
 
-	printf("locking file %s...\n", input_path);
+	printf("파일 %s을(를) 잠그는 중입니다...\n", input_path);
 
 	err = gpgme_op_encrypt(ctx, NULL, GPGME_ENCRYPT_SYMMETRIC, in_data, out_data);
 
 	if (err)
 	{
-		fprintf(stderr, "\nfailed to lock file %s : %s\n", input_path, gpgme_strerror(err));
+		fprintf(stderr, "\n파일 %s의 잠금에 실패했습니다 : %s\n", input_path, gpgme_strerror(err));
 	}
 	else
 	{
-		printf("\nfile %s locked successfully!\noutput file : %s\n", input_path, output_path);
+		printf("\n파일 %s을(를) 성공적으로 잠그었습니다!\noutput file : %s\n", input_path, output_path);
 
 		if(chmod(output_path, mode) == 0)
 		{
-			printf("Original file permissions applied to %s.\n", output_path);
+			
 		}
 		else
 		{
-			perror("Failed to apply permissions.");
+			perror("기존 권한 부여에 실패했습니다");
 		}
 
 
 		if (remove(input_path) == 0) {
             
         } else {
-            perror("failed to remove file %s. please remove file self.\n");
+            perror("기존 파일 삭제에 실패했습니다\n");
         }
 	}
 
@@ -277,7 +315,7 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 	in_file = fopen(input_path, "rb");
 	if (!in_file)
 	{
-		perror("there is no file locked.\n");
+		perror("대상 파일이 존재하지 않거나 접근할 수 없습니다\n");
 		gpgme_release(ctx);
 		return FILE_OPEN_ERROR;
 	}
@@ -285,7 +323,7 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 	out_file = fopen(output_path, "wb");
 	if(!out_file)
 	{
-		perror("can't create unlocked file.\n");
+		perror("잠금 해제 파일 생성에 실패했습니다\n");
 		fclose(in_file);
 		gpgme_release(ctx);
 		return FILE_OPEN_ERROR;
@@ -313,32 +351,30 @@ int unlock_file(char fn[], char pwd[], mode_t mode)
 
 	// unlock file
 
-	printf("unlocking file %s...\n", input_path);
-
 	err = gpgme_op_decrypt(ctx, in_data, out_data);
 
 	if (err)
 	{
-		fprintf(stderr, "\nfailed to unlock file %s : %s\n", input_path, gpgme_strerror(err));
+		fprintf(stderr, "\n파일 잠금 해제에 실패했습니다 %s : %s\n", input_path, gpgme_strerror(err));
 	}
 	else
 	{
-		printf("\nfile %s unlocked successfully!\noutput file : %s\n", input_path, output_path);
+		printf("\n파일 %s의 잠금을 해제했습니다!\noutput file : %s\n", input_path, output_path);
 
 
 		if(chmod(output_path, mode) == 0)
 		{
-			printf("Original file permissions applied to %s.\n", output_path);
+			
 		}
 		else
 		{
-			perror("Failed to apply permissions.");
+			perror("권한 부여에 실패했습니다");
 		}
 
 		if (remove(input_path) == 0) {
             
         } else {
-            perror("failed to remove file %s. please remove file self.\n");
+            perror("기존 파일 삭제에 실패했습니다\n");
         }
 	}
 
@@ -365,12 +401,12 @@ int lock_directory(char fn[], char pwd[], mode_t mode)
 
 	snprintf(tar_name, sizeof(tar_name), "%s.tar", fn);
 
-	printf("converting directory %s to %s ...\n",fn, tar_name);
+	printf("변환중 %s >>> %s ...\n",fn, tar_name);
 	snprintf(command, sizeof(command), "tar -cf %s %s", tar_name, fn);
 
 	if(system(command) != 0)
 	{
-		fprintf(stderr, "[ERROR] failed to converting tar.\n");
+		fprintf(stderr, "[ERROR] 디렉토리의 .tar 파일 변환에 실패했습니다\n");
 		return FILE_OPEN_ERROR;
 	}
 	else
@@ -384,7 +420,7 @@ int lock_directory(char fn[], char pwd[], mode_t mode)
 	        }
 	        else
 	        {
-	            perror("failed to remove file %s. please remove file self.\n");
+	            perror("기존 파일 삭제에 실패했습니다.\n");
 	        }
 
 		}
@@ -410,17 +446,17 @@ int unlock_directory(char fn[], char pwd[], mode_t mode)
 		if(ext != NULL && *(ext+4) == '\0')
 			*ext = '\0';
 
-		printf("converting %s to %s ...\n", fn, output_path);
+		printf("변환중... %s >>> %s\n", fn, output_path);
 		snprintf(command, sizeof(command), "tar -xf %s", output_path);
 
 		if(system(command) == 0)
 		{
 			remove(output_path);
-			printf("unlocking completed\n");
+			printf("잠금이 해제되었습니다\n");
 		}
 		else
 		{
-			fprintf(stderr, "[Error] failed to unlocking tar files.");
+			fprintf(stderr, "[Error] 잠금 해제에 실패했습니다");
 		}
 	}
 
@@ -429,17 +465,51 @@ int unlock_directory(char fn[], char pwd[], mode_t mode)
 
 int open_file(char fn[], char pwd[])
 {
+
+	if (_cnt_gpg_open == MAX_FILE_GPG)
+	{
+		printf(".gpg 파일은 %d개까지 열 수 있습니다\n",MAX_FILE_GPG);
+		return NOT_OPENED;
+	}
+
+
 	mode_t original_mode;
 	check_stat(fn, &original_mode);
 
+	
+
+	int result = 0;
+
 	if (is_str_end(fn, ".tar.gpg"))
 	{
-		return unlock_directory(fn, pwd, original_mode);
+		result = unlock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		return unlock_file(fn, pwd, original_mode);
+		result = unlock_file(fn, pwd, original_mode);
 	}
+	
+	if (result == 0)
+	{
+		int cur = gpg_open_check(NULL);
+		strncpy(gpg_memoryfile[cur].fn, fn, FN_MAX);
+		strncpy(gpg_memoryfile[cur].pwd, pwd, PASSWORD_MAX);
+		gpg_memoryfile[cur].is_opened = OPENED;
+
+
+		char *ext = strstr(gpg_memoryfile[cur].fn, ".gpg");
+		if(ext != NULL && *(ext + 4) == '\0')
+			*ext = '\0';
+
+
+		ext = strstr(gpg_memoryfile[cur].fn, ".tar");
+		if(ext != NULL && *(ext + 4) == '\0')
+			*ext = '\0';
+
+		_cnt_gpg_open++;
+	}
+
+	return result;
 	
 }
 
@@ -450,18 +520,29 @@ int close_file(char fn[], char pwd[])
 
 	if(stat_check == NO_PERMISSION)
 	{
-		printf("[ERROR] File %s does not exist or cannot be accessed.\n", fn);
+		printf("[ERROR] 파일 '%s' 이(가) 존재하지 않거나 접근할 수 없습니다\n", fn);
 		return FILE_OPEN_ERROR;
 	}
 
+	int result = 0;
+
 	if(stat_check == IS_DIRECTORY)
 	{
-		return lock_directory(fn, pwd, original_mode);
+		result = lock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		return lock_file(fn, pwd, original_mode);
+		result = lock_file(fn, pwd, original_mode);
 	}
+
+	if (result == 0)
+	{
+		int cur = gpg_open_check(fn);
+		gpg_memoryfile[cur].is_opened = NOT_OPENED;
+		_cnt_gpg_open--;
+	}
+
+	return result;
 }
 
 
@@ -482,7 +563,7 @@ int gpg_lock(char fn[], char pwd[])
 	int stat_check = check_stat(fn, &original_mode);
 	if (stat_check == NO_PERMISSION)
 	{
-		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		printf("[ERROR] 파일 '%s'이(가) 존재하지 않거나 접근할 수 없습니다\n", fn);
 		return FILE_OPEN_ERROR;
 	}
 
@@ -523,7 +604,7 @@ int gpg_unlock(char fn[], char pwd[])
 
 	if(is_str_end(fn, ".gpg") == 0)
 	{
-		printf("file %s is not locked file.\n", fn);
+		printf(".gpg 형태의 파일이 아닙니다 (입력 파일 : %s)\n", fn);
 		return FILE_OPEN_ERROR;
 	
 	}
@@ -532,7 +613,7 @@ int gpg_unlock(char fn[], char pwd[])
 	int stat_check = check_stat(fn, &original_mode);
 	if (stat_check == NO_PERMISSION)
 	{
-		printf("[ERROR] File '%s' does not exist or cannot be accessed.\n", fn);
+		printf("[ERROR] 파일 '%s'이(가) 존재하지 않거나 접근할 수 없습니다\n", fn);
 		return FILE_OPEN_ERROR;
 	}
 
@@ -557,19 +638,30 @@ int gpg_unlock(char fn[], char pwd[])
 	return 0;
 }
 
-
-void show_current_gpg(MemoryFile current_file[])
+void close_opened_gpg_file()
 {
-	int cnt = 0;
-
-	printf("========== current opened file ==========\n");
 
 	for (int i=0; i<MAX_FILE_GPG; i++)
 	{
-		if( current_file[i].is_opened == OPENED)
+		if (gpg_memoryfile[i].is_opened == OPENED)
 		{
-			printf("%2d : %s\n",++cnt,current_file[i].fn);
+			close_file(gpg_memoryfile[i].fn, gpg_memoryfile[i].pwd);
 		}
 	}
 }
 
+
+void show_current_gpg()
+{
+	int cnt = 0;
+
+	printf("========== 열려있는 파일 ==========\n");
+
+	for (int i=0; i<MAX_FILE_GPG; i++)
+	{
+		if( gpg_memoryfile[i].is_opened == OPENED)
+		{
+			printf("%2d : %s\n",++cnt,gpg_memoryfile[i].fn);
+		}
+	}
+}

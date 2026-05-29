@@ -12,7 +12,7 @@ sudo apt-get install libgpgme-dev
 
 
 
-gcc -Wall -o gpg_wrapper gpg_wrapper.c -lgpgme
+gcc -Wall -I./include -o factoreal src/main.c src/gpg_wrapper.c src/logger.c src/auth.c -lgpgme -lsodium
 
 
 password hash
