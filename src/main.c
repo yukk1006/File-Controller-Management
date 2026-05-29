@@ -29,9 +29,9 @@ static void print_usage(void) {
 
     printf("[Auth Mode - Password/chmod]\n");
     printf("  lock <파일/디렉토리 경로>        : 비밀번호 설정 후 Factoreal 관리 대상으로 등록\n");
+    printf("  unlock <파일/디렉토리 경로>      : 비밀번호 인증 후 Factoreal 관리 대상에서 제거\n");
     printf("  open <파일/디렉토리 경로>        : 비밀번호 인증 후 파일 copy 생성 / 디렉토리 권한 복구\n");
     printf("  close <파일/디렉토리 경로>       : 파일 copy 반영 / 디렉토리 다시 chmod 000\n");
-    printf("  remove <파일/디렉토리 경로>      : 비밀번호 인증 후 Factoreal 관리 대상에서 제거\n");
     printf("  status <파일/디렉토리 경로>      : Auth 관리 상태 확인\n\n");
 
     printf("[GPG Mode - Encryption]\n");
@@ -136,7 +136,7 @@ static void execute_command(const char *command, const char *path_arg) {
         strcmp(command, "lock") != 0 &&
         strcmp(command, "open") != 0 &&
         strcmp(command, "close") != 0 &&
-        strcmp(command, "remove") != 0 &&
+        strcmp(command, "unlock") != 0 &&
         strcmp(command, "status") != 0 &&
         strcmp(command, "gpg_lock") != 0 &&
         strcmp(command, "gpg_unlock") != 0 &&
@@ -173,7 +173,7 @@ static void execute_command(const char *command, const char *path_arg) {
     } else if (strcmp(command, "close") == 0) {
         result = auth_close_file(resolved_path, password);
 
-    } else if (strcmp(command, "remove") == 0) {
+    } else if (strcmp(command, "unlock") == 0) {
         result = auth_remove_lock(resolved_path, password);
 
     } else if (strcmp(command, "gpg_lock") == 0) {
