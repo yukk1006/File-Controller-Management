@@ -8,6 +8,7 @@
 #include <termios.h>
 
 #include "gpg_wrapper.h"
+#include "auth.h"
 
 #define NOT_OPENED 0
 #define OPENED 1
@@ -132,6 +133,13 @@ int lock_file(char fn[], char pwd[], mode_t mode)
 	const char *input_path = fn;
 
 	char output_path[FN_MAX];
+
+    if (strcmp(fn, PASS_DB) == 0)
+    {
+        printf("잠글 수 없는 파일입니다\n");
+        return -1;
+    }
+
 	snprintf(output_path, sizeof(output_path), "%s.gpg", input_path);
 
 	gpg_init();
