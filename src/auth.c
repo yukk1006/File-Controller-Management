@@ -11,7 +11,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define PASS_DB "data/.pass_db"
 #define TEMP_DB "data/.pass_db.tmp"
 #define DATA_DIR "data"
 
