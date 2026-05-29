@@ -468,7 +468,7 @@ int open_file(char fn[], char pwd[])
 
 	if (_cnt_gpg_open == MAX_FILE_GPG)
 	{
-		printf("%d\n",MAX_FILE_GPG);
+		printf(".gpg 파일은 %d개까지 열 수 있습니다\n",MAX_FILE_GPG);
 		return NOT_OPENED;
 	}
 
