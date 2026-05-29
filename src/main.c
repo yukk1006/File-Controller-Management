@@ -17,6 +17,7 @@ void handle_sigint(int signo) {
     printf("\nCtrl+C 입력 감지. 열린 파일/디렉토리를 자동 close합니다...\n");
 
     auth_close_all_open_files();
+    close_opened_gpg_file();
 
     printf("Factoreal을 종료합니다.\n");
     exit(0);
@@ -119,6 +120,7 @@ static void execute_command(const char *command, const char *path_arg) {
         if (ask_exit_confirm()) {
             printf("열린 파일/디렉토리를 자동 close합니다...\n");
             auth_close_all_open_files();
+            close_opened_gpg_file();
             printf("Factoreal을 종료합니다.\n");
             exit(0);
         }

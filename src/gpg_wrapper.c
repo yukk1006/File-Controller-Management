@@ -17,6 +17,36 @@
 #define NO_PERMISSION -1
 #define IS_DIRECTORY 1
 
+MemoryFile gpg_memoryfile[MAX_FILE_GPG];
+int _cnt_gpg_open = 0;
+
+int gpg_open_check(const char* path)
+{
+	int i = 0;
+
+	if (path == NULL)
+	{
+		for (i = 0; i<MAX_FILE_GPG; i++)
+		{
+			if(gpg_memoryfile[i].is_opened == NOT_OPENED)
+			{
+				break;
+			}
+		}	
+	}
+	else
+	{
+		for (i=0; i<MAX_FILE_GPG; i++)
+		{
+			if(strcmp(gpg_memoryfile[i].fn,path) == 0 )
+			{
+				break;
+			}
+		}
+	}
+
+	return i;
+}
 
 void gpg_init()
 {
@@ -435,17 +465,51 @@ int unlock_directory(char fn[], char pwd[], mode_t mode)
 
 int open_file(char fn[], char pwd[])
 {
+
+	if (_cnt_gpg_open == MAX_FILE_GPG)
+	{
+		printf("%d\n",MAX_FILE_GPG);
+		return NOT_OPENED;
+	}
+
+
 	mode_t original_mode;
 	check_stat(fn, &original_mode);
 
+	
+
+	int result = 0;
+
 	if (is_str_end(fn, ".tar.gpg"))
 	{
-		return unlock_directory(fn, pwd, original_mode);
+		result = unlock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		return unlock_file(fn, pwd, original_mode);
+		result = unlock_file(fn, pwd, original_mode);
 	}
+	
+	if (result == 0)
+	{
+		int cur = gpg_open_check(NULL);
+		strncpy(gpg_memoryfile[cur].fn, fn, FN_MAX);
+		strncpy(gpg_memoryfile[cur].pwd, pwd, PASSWORD_MAX);
+		gpg_memoryfile[cur].is_opened = OPENED;
+
+
+		char *ext = strstr(gpg_memoryfile[cur].fn, ".gpg");
+		if(ext != NULL && *(ext + 4) == '\0')
+			*ext = '\0';
+
+
+		ext = strstr(gpg_memoryfile[cur].fn, ".tar");
+		if(ext != NULL && *(ext + 4) == '\0')
+			*ext = '\0';
+
+		_cnt_gpg_open++;
+	}
+
+	return result;
 	
 }
 
@@ -460,14 +524,25 @@ int close_file(char fn[], char pwd[])
 		return FILE_OPEN_ERROR;
 	}
 
+	int result = 0;
+
 	if(stat_check == IS_DIRECTORY)
 	{
-		return lock_directory(fn, pwd, original_mode);
+		result = lock_directory(fn, pwd, original_mode);
 	}
 	else
 	{
-		return lock_file(fn, pwd, original_mode);
+		result = lock_file(fn, pwd, original_mode);
 	}
+
+	if (result == 0)
+	{
+		int cur = gpg_open_check(fn);
+		gpg_memoryfile[cur].is_opened = NOT_OPENED;
+		_cnt_gpg_open--;
+	}
+
+	return result;
 }
 
 
@@ -563,8 +638,20 @@ int gpg_unlock(char fn[], char pwd[])
 	return 0;
 }
 
+void close_opened_gpg_file()
+{
 
-void show_current_gpg(MemoryFile current_file[])
+	for (int i=0; i<MAX_FILE_GPG; i++)
+	{
+		if (gpg_memoryfile[i].is_opened == OPENED)
+		{
+			close_file(gpg_memoryfile[i].fn, gpg_memoryfile[i].pwd);
+		}
+	}
+}
+
+
+void show_current_gpg()
 {
 	int cnt = 0;
 
@@ -572,9 +659,9 @@ void show_current_gpg(MemoryFile current_file[])
 
 	for (int i=0; i<MAX_FILE_GPG; i++)
 	{
-		if( current_file[i].is_opened == OPENED)
+		if( gpg_memoryfile[i].is_opened == OPENED)
 		{
-			printf("%2d : %s\n",++cnt,current_file[i].fn);
+			printf("%2d : %s\n",++cnt,gpg_memoryfile[i].fn);
 		}
 	}
 }
