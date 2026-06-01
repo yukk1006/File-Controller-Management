@@ -366,31 +366,41 @@ static int copy_file_content(
     gid_t gid
 ) {
     int in_fd = open(src, O_RDONLY);
-
     if (in_fd < 0) {
         perror("open src");
         return -1;
     }
 
-    int out_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    char tmp_path[MAX_PATH_LEN];
+    int len = snprintf(tmp_path, sizeof(tmp_path),
+                       "%s.factoreal_tmp_%d", dst, getpid());
 
+    if (len < 0 || len >= (int)sizeof(tmp_path)) {
+        fprintf(stderr, "임시 파일 경로가 너무 깁니다.\n");
+        close(in_fd);
+        return -1;
+    }
+
+    int out_fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (out_fd < 0) {
-        perror("open dst");
+        perror("open temp dst");
         close(in_fd);
         return -1;
     }
 
     if (fchown(out_fd, uid, gid) != 0) {
-        perror("fchown dst");
+        perror("fchown temp dst");
         close(in_fd);
         close(out_fd);
+        unlink(tmp_path);
         return -1;
     }
 
     if (fchmod(out_fd, dst_mode) != 0) {
-        perror("fchmod dst");
+        perror("fchmod temp dst");
         close(in_fd);
         close(out_fd);
+        unlink(tmp_path);
         return -1;
     }
 
@@ -400,23 +410,46 @@ static int copy_file_content(
         ssize_t n = read(in_fd, buf, sizeof(buf));
 
         if (n < 0) {
-            perror("read file");
+            perror("read src");
             close(in_fd);
             close(out_fd);
+            unlink(tmp_path);
             return -1;
         }
 
-        if (n == 0) break;
+        if (n == 0) {
+            break;
+        }
 
         if (write_all(out_fd, buf, (size_t)n) != 0) {
             close(in_fd);
             close(out_fd);
+            unlink(tmp_path);
             return -1;
         }
     }
 
+    if (fsync(out_fd) != 0) {
+        perror("fsync temp dst");
+        close(in_fd);
+        close(out_fd);
+        unlink(tmp_path);
+        return -1;
+    }
+
     close(in_fd);
-    close(out_fd);
+
+    if (close(out_fd) != 0) {
+        perror("close temp dst");
+        unlink(tmp_path);
+        return -1;
+    }
+
+    if (rename(tmp_path, dst) != 0) {
+        perror("rename temp to dst");
+        unlink(tmp_path);
+        return -1;
+    }
 
     return 0;
 }
