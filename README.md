@@ -8,6 +8,6 @@ sudo apt update
 sudo apt install libsodium-dev
 
 compile and settings
-gcc -Wall -I./include -o factoreal src/main.c src/gpg_wrapper.c src/logger.c src/auth.c -lgpgme -lsodium
+gcc -Wall -I./include -o factoreal src/main.c src/gpg_wrapper.c src/logger.c src/auth.c src/path_guard.c -lgpgme -lsodium
 sudo chown root:root factoreal
 sudo chmod 47xx factoreal
