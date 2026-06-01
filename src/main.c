@@ -1,5 +1,6 @@
 #include "auth.h"
 #include "gpg_wrapper.h"
+#include "path_guard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +88,12 @@ static int resolve_path(const char *input_path, char *resolved_path) {
     if (realpath(input_path, resolved_path) == NULL) {
         fprintf(stderr, "경로를 해석할 수 없습니다: %s\n", input_path);
         return -1;
+    }
+
+    if (is_protected_path(resolved_path)) {
+    fprintf(stderr, "시스템 또는 Factoreal 내부 보호 경로는 사용할 수 없습니다: %s\n",
+            resolved_path);
+    return -1;
     }
 
     return 0;
