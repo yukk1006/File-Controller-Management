@@ -35,6 +35,7 @@ static void print_usage(void) {
     printf("  open <파일/디렉토리 경로>        : 비밀번호 인증 후 파일 copy 생성 / 디렉토리 권한 복구\n");
     printf("  close <파일/디렉토리 경로>       : 파일 copy 반영 / 디렉토리 다시 chmod 000\n");
     printf("  status <파일/디렉토리 경로>      : Auth 관리 상태 확인\n\n");
+    printf("  force-remove <경로>        : 파일 소유자 확인 후 비밀번호 없이 잠금 해제\n");
 
     printf("[GPG Mode - Encryption]\n");
     printf("  gpg_lock <경로>          : GPG 방식으로 파일/디렉토리 암호화\n");
@@ -146,6 +147,7 @@ static void execute_command(const char *command, const char *path_arg) {
         strcmp(command, "open") != 0 &&
         strcmp(command, "close") != 0 &&
         strcmp(command, "unlock") != 0 &&
+        strcmp(command, "force-remove") != 0 &&
         strcmp(command, "status") != 0 &&
         strcmp(command, "gpg_lock") != 0 &&
         strcmp(command, "gpg_unlock") != 0 &&
@@ -169,6 +171,16 @@ static void execute_command(const char *command, const char *path_arg) {
         return;
     }
 
+    if (strcmp(command, "force-remove") == 0) {
+    result = auth_force_remove_lock(resolved_path);
+
+    if (result != 0) {
+        fprintf(stderr, "명령 실행에 실패했습니다.\n");
+    }
+
+    return;
+    }
+
     if (read_password(password, sizeof(password)) != 0) {
         return;
     }
@@ -184,6 +196,9 @@ static void execute_command(const char *command, const char *path_arg) {
 
     } else if (strcmp(command, "unlock") == 0) {
         result = auth_remove_lock(resolved_path, password);
+
+    } else if (strcmp(command, "force-remove") == 0) {
+    result = auth_force_remove_lock(resolved_path);
 
     } else if (strcmp(command, "gpg_lock") == 0) {
         result = gpg_lock(resolved_path, password);

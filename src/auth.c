@@ -756,3 +756,34 @@ int auth_remove_lock(const char *path, const char *password) {
     printf("Factoreal 관리 대상에서 제거하고 원래 권한을 복구했습니다: %s\n", path);
     return 0;
 }
+
+int auth_force_remove_lock(const char *path) {
+    AuthRecord rec;
+
+    if (!find_record(path, &rec)) {
+        fprintf(stderr, "Factoreal 관리 대상이 아닙니다.\n");
+        return -1;
+    }
+
+    if (rec.owner_uid != getuid()) {
+        fprintf(stderr, "파일 소유자만 비밀번호 없이 강제 해제할 수 있습니다.\n");
+        return -1;
+    }
+
+    if (strcmp(rec.state, "OPEN") == 0) {
+        fprintf(stderr, "현재 OPEN 상태입니다. 먼저 close를 수행하세요.\n");
+        return -1;
+    }
+
+    if (chmod(rec.path, rec.original_mode) != 0) {
+        perror("chmod restore");
+        return -1;
+    }
+
+    if (remove_record(rec.path) != 0) {
+        return -1;
+    }
+
+    printf("파일 소유자 확인 완료. 비밀번호 없이 강제 해제했습니다: %s\n", rec.path);
+    return 0;
+}
