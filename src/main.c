@@ -34,8 +34,8 @@ static void print_usage(void) {
     printf("  unlock <파일/디렉토리 경로>      : 비밀번호 인증 후 Factoreal 관리 대상에서 제거\n");
     printf("  open <파일/디렉토리 경로>        : 비밀번호 인증 후 파일 copy 생성 / 디렉토리 권한 복구\n");
     printf("  close <파일/디렉토리 경로>       : 파일 copy 반영 / 디렉토리 다시 chmod 000\n");
-    printf("  status <파일/디렉토리 경로>      : Auth 관리 상태 확인\n\n");
-    printf("  force-remove <경로>        : 파일 소유자 확인 후 비밀번호 없이 잠금 해제\n");
+    printf("  status <파일/디렉토리 경로>      : Auth 관리 상태 확인\n");
+    printf("  force-remove <경로>        : 파일 소유자 확인 후 비밀번호 없이 잠금 해제\n\n");
 
     printf("[GPG Mode - Encryption]\n");
     printf("  gpg_lock <경로>          : GPG 방식으로 파일/디렉토리 암호화\n");
