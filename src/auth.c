@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define PASS_DB "data/.pass_db"
 #define TEMP_DB "data/.pass_db.tmp"
 #define DATA_DIR "data"
 
@@ -343,7 +344,7 @@ static int make_workspace_path(const char *original_path, char *out_path, size_t
     int len = snprintf(
         out_path,
         size,
-        "/tmp/factoreal_%u_%d_%s",
+        "data/factoreal_tmp_%u_%d_%s",
         (unsigned int)getuid(),
         getpid(),
         base
